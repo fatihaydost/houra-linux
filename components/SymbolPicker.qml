@@ -14,13 +14,19 @@ Item {
   property string lang: "en"
   property string fontFamily: "Sans Serif"
 
-  signal saveCategory(int catId, string color, string emoji, string iconName, string iconColor)
+  signal saveCategory(int catId, string name, string color, string emoji, string iconName, string iconColor)
+  signal removeCategory(int catId)
   signal closed()
+
+  // The page turns this off for the last category (the backend keeps at least one)
+  property bool canDelete: true
+  property bool confirmDelete: false
 
   anchors.fill: parent
   visible: open
   z: 50
 
+  property string selName: ""
   property string selColor: "#4c8df0"
   property string selEmoji: ""
   property string selIcon: ""
@@ -33,7 +39,7 @@ Item {
 
   readonly property var filteredIcons: IconData.search(iconQuery)
   readonly property var iconColorPalette: ["#ffffff", "#000000"].concat(Theme.palette)
-  readonly property bool isEditingText: hexInput.activeFocus || searchField.activeFocus || iconHexInput.activeFocus || emojiInput.activeFocus
+  readonly property bool isEditingText: nameInput.activeFocus || hexInput.activeFocus || searchField.activeFocus || iconHexInput.activeFocus || emojiInput.activeFocus
 
   onFilteredIconsChanged: {
     var cnt = filteredIcons ? filteredIcons.length : 0
@@ -42,6 +48,7 @@ Item {
 
   function releaseTextFocus() {
     if (!isEditingText) return false
+    nameInput.focus = false
     hexInput.focus = false
     searchField.focus = false
     iconHexInput.focus = false
@@ -240,6 +247,9 @@ Item {
   function openFor(cat) {
     if (!cat) return
     category = cat
+    selName = cat.name || ""
+    nameInput.text = selName
+    confirmDelete = false
     selColor = cat.color || "#4c8df0"
     selEmoji = cat.emoji || ""
     selIcon = cat.icon || ""
@@ -257,12 +267,37 @@ Item {
 
   function commitNow() {
     if (!category) return
-    root.saveCategory(Number(category.id), selColor, selEmoji, selIcon, selIconColor)
+    var name = selName.trim() || category.name
+    root.saveCategory(Number(category.id), name, selColor, selEmoji, selIcon, selIconColor)
   }
 
   function closeModal() {
+    // A typed name that wasn't confirmed with Enter is still kept
+    if (category && selName.trim() !== "" && selName.trim() !== category.name) commitNow()
+    confirmDelete = false
     open = false
     root.closed()
+  }
+
+  function pressDelete() {
+    if (!category || !canDelete) return
+    if (!confirmDelete) {
+      confirmDelete = true
+      deleteArmTimer.restart()
+      return
+    }
+    deleteArmTimer.stop()
+    confirmDelete = false
+    var cid = Number(category.id)
+    open = false
+    root.removeCategory(cid)
+    root.closed()
+  }
+
+  Timer {
+    id: deleteArmTimer
+    interval: 3500
+    onTriggered: root.confirmDelete = false
   }
 
   Rectangle {
@@ -300,31 +335,95 @@ Item {
         width: parent.width
         height: 36
 
-        Row {
+        CategorySwatch {
+          id: headerSwatch
           anchors.left: parent.left
           anchors.verticalCenter: parent.verticalCenter
-          spacing: 10
+          swatchSize: 32
+          swatchColor: root.selColor
+          emoji: root.selEmoji
+          iconName: root.selIcon
+          iconColor: root.selIconColor
+        }
 
-          CategorySwatch {
-            swatchSize: 32
-            swatchColor: root.selColor
-            emoji: root.selEmoji
-            iconName: root.selIcon
-            iconColor: root.selIconColor
-          }
+        // Category name, editable in place; Enter saves
+        Rectangle {
+          anchors.left: headerSwatch.right
+          anchors.leftMargin: 10
+          anchors.right: deleteBtn.left
+          anchors.rightMargin: 8
+          anchors.verticalCenter: parent.verticalCenter
+          height: 30
+          radius: 7
+          color: nameInput.activeFocus ? (root.tokens.raised || "#2b2b33") : "transparent"
+          border.width: nameInput.activeFocus ? 1 : 0
+          border.color: root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.16)
 
-          Text {
-            textFormat: Text.PlainText
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.category ? root.category.name : ""
+          TextInput {
+            id: nameInput
+            anchors.fill: parent
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
+            verticalAlignment: TextInput.AlignVCenter
+            clip: true
+            maximumLength: 40
             font.family: root.fontFamily
             font.pixelSize: 15
             font.weight: Font.DemiBold
             color: root.tokens.ink || "#ffffff"
+            selectByMouse: true
+            onTextEdited: root.selName = text
+            onAccepted: {
+              root.commitNow()
+              focus = false
+            }
+            Keys.onEscapePressed: function(event) {
+              text = root.category ? root.category.name : ""
+              root.selName = text
+              focus = false
+              event.accepted = true
+            }
+          }
+        }
+
+        // Two-step delete: first press arms "Delete?" for 3.5 s, second press deletes
+        Rectangle {
+          id: deleteBtn
+          visible: root.canDelete
+          anchors.right: doneBtn.left
+          anchors.rightMargin: 8
+          anchors.verticalCenter: parent.verticalCenter
+          width: visible ? delLabel.implicitWidth + 18 : 0
+          height: 28
+          radius: 7
+          color: root.confirmDelete
+            ? Theme.withAlpha(root.tokens.danger || "#e06458", 0.22)
+            : (delMa.containsMouse ? (root.tokens.raised || "#2b2b33") : "transparent")
+          border.width: 1
+          border.color: root.confirmDelete ? (root.tokens.danger || "#e06458") : (root.tokens.line || Qt.rgba(1, 1, 1, 0.10))
+
+          Text {
+            textFormat: Text.PlainText
+            id: delLabel
+            anchors.centerIn: parent
+            text: root.confirmDelete ? Theme.t(root.lang, "Silinsin mi?", "Delete?") : Theme.t(root.lang, "Sil", "Delete")
+            font.family: root.fontFamily
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            color: root.confirmDelete ? (root.tokens.danger || "#e06458") : (root.tokens.muted || "#888888")
+          }
+
+          MouseArea {
+            id: delMa
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.pressDelete()
           }
         }
 
         Rectangle {
+          id: doneBtn
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
           width: doneLabel.implicitWidth + 20

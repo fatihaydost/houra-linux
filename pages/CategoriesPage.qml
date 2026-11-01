@@ -62,7 +62,7 @@ Item {
     if (top < catFlick.contentY) {
       catFlick.contentY = Math.max(0, top)
     } else if (bot > catFlick.contentY + catFlick.height) {
-      var maxY = Math.max(0, catFlick.contentHeight - catFlick.height)
+      const maxY = Math.max(0, catFlick.contentHeight - catFlick.height)
       catFlick.contentY = Math.min(maxY, bot - catFlick.height)
     }
   }
@@ -169,8 +169,8 @@ Item {
     if (k === Qt.Key_Return || k === Qt.Key_Enter) {
       kbActive = true
       kbIndex = idx
-      var rowItem = catListRepeater.itemAt(idx)
-      if (rowItem) rowItem.focusRename()
+      const rowItem = catListRepeater.itemAt(idx)
+      if (rowItem) rowItem.focusRename() // qmllint disable missing-property
       return true
     }
     if (k === Qt.Key_Space) {
@@ -182,7 +182,7 @@ Item {
     if ((k === Qt.Key_Delete || k === Qt.Key_Backspace) && count > 1 && cat) {
       kbActive = true
       kbIndex = idx
-      var cid = Number(cat.id)
+      const cid = Number(cat.id)
       if (confirmDeleteId === cid) {
         confirmDeleteId = 0
         if (service) service.deleteCategory(cid)
@@ -461,16 +461,12 @@ Item {
     tokens: root.tokens
     lang: root.lang
     fontFamily: root.fontFamily
-    onSaveCategory: function(catId, col, em, ic, icCol) {
-      if (!root.service) return
-      var cname = ""
-      for (var i = 0; i < root.categories.length; i++) {
-        if (Number(root.categories[i].id) === catId) {
-          cname = root.categories[i].name
-          break
-        }
-      }
-      root.service.updateCategory(catId, cname, col, em, ic, icCol)
+    canDelete: root.categories.length > 1
+    onSaveCategory: function(catId, cname, col, em, ic, icCol) {
+      if (root.service) root.service.updateCategory(catId, cname, col, em, ic, icCol)
+    }
+    onRemoveCategory: function(catId) {
+      if (root.service) root.service.deleteCategory(catId)
     }
   }
 }
