@@ -10,6 +10,9 @@ Item {
   id: root
 
   property var service: null
+  // Todoist actions only make sense while an account is connected and sync is on
+  readonly property bool todoistLive: !!(service && service.settings && service.settings.todoistOn
+    && service.todoistData && service.todoistData.hasToken)
   property var tokens: ({})
   property string lang: "en"
   property string fontFamily: "Sans Serif"
@@ -31,8 +34,8 @@ Item {
   readonly property int cornerR: drawerMode ? 0 : 22
 
   width: drawerMode ? 380 : 360
-  implicitHeight: drawerMode ? parent.height : Math.min(maxCardHeight, contentCol.implicitHeight + 36)
-  height: drawerMode ? parent.height : implicitHeight
+  implicitHeight: drawerMode ? parent.height - y : Math.min(maxCardHeight, contentCol.implicitHeight + 36)
+  height: drawerMode ? parent.height - y : implicitHeight
   clip: true
 
   // Edge-aware glass background (slices flat on the screen-snapped edge)
@@ -518,7 +521,7 @@ Item {
               readonly property int st: Number(td.state) || 0
               readonly property int prio: Number(td.priority) || 1
               readonly property string dueTimeStr: String(td.dueTime || "")
-              readonly property bool hasTodoist: (td.todoistId || "") !== ""
+              readonly property bool hasTodoist: root.todoistLive && (td.todoistId || "") !== ""
               readonly property bool tdDone: !!td.todoistDone
               width: contentCol.width
               height: Math.max(40, tdTextCol.implicitHeight + 14)

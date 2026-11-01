@@ -17,6 +17,9 @@ Item {
   property Item anchorItem: null
   property var hostWidget: null
   property var service: null
+  // Todoist actions only make sense while an account is connected and sync is on
+  readonly property bool todoistLive: !!(service && service.settings && service.settings.todoistOn
+    && service.todoistData && service.todoistData.hasToken)
   property bool popoutSwitchClosing: false
   property bool confirmCancel: false
   property int kbIndex: 0
@@ -481,7 +484,7 @@ Item {
                 readonly property int st: Number(td.state) || 0
                 readonly property int prio: Number(td.priority) || 1
                 readonly property string dueTimeStr: String(td.dueTime || "")
-                readonly property bool hasTd: (td.todoistId || "") !== ""
+                readonly property bool hasTd: root.todoistLive && (td.todoistId || "") !== ""
                 readonly property bool tdDone: !!td.todoistDone
                 readonly property bool kbSel: root.isActionSelected("todo:" + td.id)
                 width: menuCol.width
@@ -1035,9 +1038,9 @@ Item {
 
           Repeater {
             model: [
-              { tab: "", keyHint: "P", label: Theme.t(root.lang, "Paneli aç…", "Open panel…") },
-              { tab: "stats", keyHint: "S", label: Theme.t(root.lang, "İstatistikler…", "Statistics…") },
-              { tab: "settings", keyHint: ",", label: Theme.t(root.lang, "Ayarlar…", "Settings…") }
+              { tab: "", label: Theme.t(root.lang, "Paneli aç…", "Open panel…") },
+              { tab: "stats", label: Theme.t(root.lang, "İstatistikler…", "Statistics…") },
+              { tab: "settings", label: Theme.t(root.lang, "Ayarlar…", "Settings…") }
             ]
             delegate: Rectangle {
               readonly property bool kbSel: root.isActionSelected("nav:" + modelData.tab)
@@ -1064,7 +1067,7 @@ Item {
                 anchors.right: parent.right
                 anchors.rightMargin: 8
                 anchors.verticalCenter: parent.verticalCenter
-                text: modelData.keyHint || "↗"
+                text: "↗"
                 font.family: "Monospace"
                 font.pixelSize: 11
                 color: Theme.withAlpha(Commons.Color.popups.text, 0.42)

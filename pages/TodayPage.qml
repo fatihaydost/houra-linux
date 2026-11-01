@@ -1053,7 +1053,7 @@ Item {
 
                           Rectangle {
                             readonly property bool tdDone: !!td.todoistDone
-                            visible: (td.todoistId || "") !== ""
+                            visible: root.todoistConfigured && (td.todoistId || "") !== ""
                             width: tdOriginTxt.implicitWidth + 12
                             height: 18
                             radius: 5

@@ -196,6 +196,31 @@ class HouraBackendAndMarketplaceTests(unittest.TestCase):
                         missing.append(f"{path.relative_to(ROOT)}:{i + 1}")
         self.assertEqual(missing, [], "Text items without textFormat PlainText")
 
+    def test_stale_free_session_keeps_its_checkpoint(self) -> None:
+        # A free-mode row left open for days must not be closed with the whole gap as focus time
+        import sqlite3
+        self.rpc("snapshot")
+        start = dt.datetime.now().timestamp() - 5 * 86400
+        with sqlite3.connect(self.env["HOURA_DB"]) as conn:
+            cur = conn.execute(
+                "INSERT INTO sessions (category_id, goal, work_min, rest_min, start, focus_sec) VALUES (1, 'old', 0, 0, ?, 1200)",
+                (start,),
+            )
+            old_id = cur.lastrowid
+        self.rpc("start-session", {"categoryId": 1, "goal": "new", "workMinutes": 25, "breakMinutes": 5})
+        with sqlite3.connect(self.env["HOURA_DB"]) as conn:
+            end, focus = conn.execute("SELECT end, focus_sec FROM sessions WHERE id = ?", (old_id,)).fetchone()
+        self.assertEqual(focus, 1200)
+        self.assertAlmostEqual(end, start + 1200, delta=1)
+
+    def test_disconnect_drops_todoist_links(self) -> None:
+        state = Path(self.env["HOURA_STATE_DIR"])
+        state.mkdir(parents=True, exist_ok=True)
+        links = state / "todoist_links.json"
+        links.write_text(json.dumps({"1": {"id": "td_1", "done": False}}))
+        self.rpc("clear-todoist-token")
+        self.assertFalse(links.exists())
+
     def test_weekly_markdown_wildcard_and_obsidian_syntax(self) -> None:
         vault = Path(self.tmp.name) / "200-Weekly"
         vault.mkdir()

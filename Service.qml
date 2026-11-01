@@ -244,9 +244,45 @@ Item {
     _pumpRpc()
   }
 
+  // Stdout end and process exit can arrive in either order; finish a job once, when both are in
+  property string _rpcOut: ""
+  property int _rpcGot: 0 // bit 1: stdout finished, bit 2: process exited
+
+  function _rpcFinish(force) {
+    if (!_rpcBusy || (_rpcGot !== 3 && !force)) return
+    rpcGuardTimer.stop()
+    var finishedJob = _currentRpc
+    _currentRpc = null
+    _rpcBusy = false
+
+    var parsed = null
+    var raw = String(_rpcOut || "").trim()
+    if (raw.length > 0) {
+      try { parsed = JSON.parse(raw) } catch (e) { parsed = null }
+    }
+    if (parsed && parsed.ok) {
+      _applySnapshot(parsed)
+      if (finishedJob && finishedJob.onDone) {
+        try { finishedJob.onDone(parsed) } catch (e2) {}
+      }
+    } else {
+      todoistSyncing = false
+    }
+    _pumpRpc()
+  }
+
+  // A process that never produced a stdout end (failed to start) must not stall the queue
+  Timer {
+    id: rpcGuardTimer
+    interval: 1500
+    onTriggered: svcRoot._rpcFinish(true)
+  }
+
   function _pumpRpc() {
     if (_rpcBusy || _rpcQueue.length === 0) return
     _rpcBusy = true
+    _rpcOut = ""
+    _rpcGot = 0
     _currentRpc = _rpcQueue.shift()
     rpcProcess.stdinEnabled = true
     rpcProcess.command = [
@@ -283,33 +319,17 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        var finishedJob = svcRoot._currentRpc
-        svcRoot._currentRpc = null
-        svcRoot._rpcBusy = false
-
-        var parsed = null
-        var raw = String(text || "").trim()
-        if (raw.length > 0) {
-          try { parsed = JSON.parse(raw) } catch (e) { parsed = null }
-        }
-        if (parsed && parsed.ok) {
-          svcRoot._applySnapshot(parsed)
-          if (finishedJob && finishedJob.onDone) {
-            try { finishedJob.onDone(parsed) } catch (e2) {}
-          }
-        } else {
-          svcRoot.todoistSyncing = false
-        }
-        svcRoot._pumpRpc()
+        if (!svcRoot._rpcBusy) return
+        svcRoot._rpcOut = String(text || "")
+        svcRoot._rpcGot |= 1
+        svcRoot._rpcFinish(false)
       }
     }
     onExited: function(exitCode) {
-      if (exitCode !== 0 && svcRoot._rpcBusy) {
-        svcRoot._currentRpc = null
-        svcRoot._rpcBusy = false
-        svcRoot.todoistSyncing = false
-        svcRoot._pumpRpc()
-      }
+      if (!svcRoot._rpcBusy) return
+      svcRoot._rpcGot |= 2
+      if (svcRoot._rpcGot !== 3) rpcGuardTimer.restart()
+      svcRoot._rpcFinish(false)
     }
   }
 
@@ -385,84 +405,102 @@ Item {
 
   // --- Non-blocking Native Folder / CSV Picker Processes (Zenity with fallback) ---
   property string _pickerMode: "" // "weekly-folder" | "weekly-file" | "csv-save"
+  property string _pickerOut: ""
+  property int _pickerExit: 0
+  property int _pickerGot: 0 // bit 1: stdout finished, bit 2: process exited
+
+  function _launchPicker(mode, cmd) {
+    if (dialogProcess.running) return
+    _pickerMode = mode
+    _pickerOut = ""
+    _pickerExit = 0
+    _pickerGot = 0
+    nativeDialogOpen = true
+    dialogProcess.command = cmd
+    dialogProcess.running = true
+  }
+
+  function _pickerFinish(force) {
+    if (!_pickerMode || (_pickerGot !== 3 && !force)) return
+    pickerGuardTimer.stop()
+    var mode = _pickerMode
+    var chosen = String(_pickerOut || "").trim()
+    _pickerMode = ""
+    nativeDialogOpen = false
+    // Exit code 127 means zenity is not installed -> fallback for CSV export
+    if (_pickerExit === 127) {
+      if (mode === "csv-save") exportCsv("")
+      return
+    }
+    if (!chosen) return
+    var homeDir = Quickshell.env("HOME") || ""
+    var pretty = (homeDir && chosen.indexOf(homeDir) === 0)
+      ? ("~" + chosen.slice(homeDir.length))
+      : chosen
+    if (mode === "weekly-folder") {
+      var cleanDir = pretty.replace(/\/+$/, "")
+      patchSettings({ weeklyOn: true, weeklyTemplate: cleanDir + "/*{WW}*.md" })
+    } else if (mode === "weekly-file") {
+      patchSettings({ weeklyOn: true, weeklyTemplate: pretty })
+    } else if (mode === "csv-save") {
+      exportCsv(chosen)
+    }
+  }
+
+  Timer {
+    id: pickerGuardTimer
+    interval: 1500
+    onTriggered: svcRoot._pickerFinish(true)
+  }
 
   Process {
     id: dialogProcess
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        var chosen = String(text || "").trim()
-        var mode = svcRoot._pickerMode
-        svcRoot._pickerMode = ""
-        svcRoot.nativeDialogOpen = false
-        if (!chosen) return
-        var homeDir = Quickshell.env("HOME") || ""
-        var pretty = (homeDir && chosen.indexOf(homeDir) === 0)
-          ? ("~" + chosen.slice(homeDir.length))
-          : chosen
-        if (mode === "weekly-folder") {
-          var cleanDir = pretty.replace(/\/+$/, "")
-          svcRoot.patchSettings({ weeklyOn: true, weeklyTemplate: cleanDir + "/*{WW}*.md" })
-        } else if (mode === "weekly-file") {
-          svcRoot.patchSettings({ weeklyOn: true, weeklyTemplate: pretty })
-        } else if (mode === "csv-save") {
-          svcRoot.exportCsv(chosen)
-        }
+        if (!svcRoot._pickerMode) return
+        svcRoot._pickerOut = String(text || "")
+        svcRoot._pickerGot |= 1
+        svcRoot._pickerFinish(false)
       }
     }
     onExited: function(exitCode) {
-      var mode = svcRoot._pickerMode
-      if (svcRoot.nativeDialogOpen) {
-        svcRoot._pickerMode = ""
-        svcRoot.nativeDialogOpen = false
-      }
-      // Exit code 127 means zenity is not installed -> fallback for CSV export
-      if (exitCode === 127 && mode === "csv-save") {
-        svcRoot.exportCsv("")
-      }
+      if (!svcRoot._pickerMode) return
+      svcRoot._pickerExit = exitCode
+      svcRoot._pickerGot |= 2
+      if (svcRoot._pickerGot !== 3) pickerGuardTimer.restart()
+      svcRoot._pickerFinish(false)
     }
   }
 
   function chooseWeeklyFolder() {
-    if (dialogProcess.running) return
-    _pickerMode = "weekly-folder"
-    nativeDialogOpen = true
-    dialogProcess.command = [
+    _launchPicker("weekly-folder", [
       "zenity",
       "--file-selection",
       "--directory",
       "--title=" + Theme.t(lang, "Haftalık görev klasörünü seç", "Choose weekly tasks folder")
-    ]
-    dialogProcess.running = true
+    ])
   }
 
   function chooseWeeklyFile() {
-    if (dialogProcess.running) return
-    _pickerMode = "weekly-file"
-    nativeDialogOpen = true
-    dialogProcess.command = [
+    _launchPicker("weekly-file", [
       "zenity",
       "--file-selection",
       "--file-filter=Markdown (*.md) | *.md",
       "--title=" + Theme.t(lang, "Haftalık Markdown dosyasını seç", "Choose weekly Markdown file")
-    ]
-    dialogProcess.running = true
+    ])
   }
 
   function exportCsvInteractive() {
-    if (dialogProcess.running) return
-    _pickerMode = "csv-save"
-    nativeDialogOpen = true
     var dl = (Quickshell.env("HOME") || "") + "/Downloads/houra.csv"
-    dialogProcess.command = [
+    _launchPicker("csv-save", [
       "zenity",
       "--file-selection",
       "--save",
       "--confirm-overwrite",
       "--filename=" + dl,
       "--title=" + Theme.t(lang, "CSV olarak dışa aktar", "Export as CSV")
-    ]
-    dialogProcess.running = true
+    ])
   }
 
   // --- Public Actions ---

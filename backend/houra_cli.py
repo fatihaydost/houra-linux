@@ -2460,6 +2460,9 @@ def handle_command(cmd: str, payload: dict[str, Any]) -> dict[str, Any]:
                 snap["todoistSynced"] = False
                 return snap
         acc_label = _fetch_todoist_account_label(tok)
+        if load_todoist_token() not in ("", tok):
+            # Another account: links to the old account's task ids would point at nothing
+            todoist_links_path().unlink(missing_ok=True)
         save_todoist_token_file(tok)
         todoist_cache_path().unlink(missing_ok=True)
         now_ts = time.time()
@@ -2487,6 +2490,7 @@ def handle_command(cmd: str, payload: dict[str, Any]) -> dict[str, Any]:
     if cmd == "clear-todoist-token":
         save_todoist_token_file("")
         todoist_cache_path().unlink(missing_ok=True)
+        todoist_links_path().unlink(missing_ok=True)
         save_settings({"todoistOn": False})
         with open_db(lang) as conn:
             return build_snapshot(conn, payload)
@@ -2528,13 +2532,17 @@ def handle_command(cmd: str, payload: dict[str, Any]) -> dict[str, Any]:
                 oid = int(orow["id"])
                 if close_prev_id == oid and close_prev_sec is not None:
                     actual_sec = max(0, int(close_prev_sec))
+                    end_ts = start_ts
                 else:
+                    # A stale row (shell crashed or was left open for days): trust its planned length or, in
+                    # free mode, its last checkpoint, never the wall-clock gap until this new session
                     ow = int(orow["work_min"])
                     raw_el = max(0, int(start_ts - float(orow["start"])))
-                    actual_sec = min(raw_el, ow * 60) if ow > 0 else max(int(orow["focus_sec"]), raw_el)
+                    actual_sec = min(raw_el, ow * 60) if ow > 0 else min(raw_el, max(0, int(orow["focus_sec"])))
+                    end_ts = float(orow["start"]) + actual_sec
                 conn.execute(
                     "UPDATE sessions SET end = ?, focus_sec = ? WHERE id = ?",
-                    (start_ts, actual_sec, oid),
+                    (end_ts, actual_sec, oid),
                 )
 
             cur = conn.execute(
