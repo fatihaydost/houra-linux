@@ -1351,6 +1351,22 @@ def _parse_todoist_due_datetime(due_obj: dict[str, Any]) -> tuple[str, str]:
         return day_part, _normalize_due_time(hm)
 
 
+def _todoist_recurrence_key(due_obj: dict[str, Any]) -> str:
+    """Map a recurring Todoist due string onto Houra's recurrence keys ("" when unknown)."""
+    if not due_obj or not due_obj.get("is_recurring"):
+        return ""
+    s = str(due_obj.get("string") or "").strip().lower()
+    if re.match(r"^(every (weekday|workday)|hafta ?içi|her hafta ?içi)", s):
+        return "weekday"
+    if re.match(r"^(every day|daily|her gün)", s):
+        return "daily"
+    if re.match(r"^(every month|monthly|her ay)", s):
+        return "monthly"
+    if re.match(r"^(every week|weekly|her hafta|every (mon|tue|wed|thu|fri|sat|sun)[a-z]*\b)", s):
+        return "weekly"
+    return ""
+
+
 def sync_todoist_task_completion(
     todoist_id: str,
     completed: bool,
@@ -1575,6 +1591,7 @@ def load_todoist_tasks(
             "dueDate": due_date_prefix,
             "dueTime": due_time_hm,
             "isRecurring": is_recurring,
+            "recurrence": _todoist_recurrence_key(due),
             "dueLabel": due_label,
             "isOverdue": is_overdue,
             "priority": prio,
@@ -3079,8 +3096,8 @@ def handle_command(cmd: str, payload: dict[str, Any]) -> dict[str, Any]:
                 req_body["priority"] = _clamp_priority(payload["priority"])
             elif sh_prio is not None:
                 req_body["priority"] = sh_prio
-            if "projectId" in payload and str(payload.get("projectId") or "").strip():
-                req_body["project_id"] = str(payload["projectId"]).strip()
+            # Todoist v1 ignores project_id on update; moving needs /tasks/{id}/move.
+            move_project_id = str(payload.get("projectId") or "").strip()
 
             has_due_patch = any(
                 k in payload for k in ("scope", "day", "endDay", "dueTime", "recurrence", "clearDue")
@@ -3101,7 +3118,13 @@ def handle_command(cmd: str, payload: dict[str, Any]) -> dict[str, Any]:
                     )
 
             encoded_id = urllib.parse.quote(td_id, safe="")
-            st_code, _, raw_err = _todoist_http("POST", f"/tasks/{encoded_id}", tok, payload=req_body, timeout=6.0)
+            st_code, raw_err = 200, ""
+            if req_body or not move_project_id:
+                st_code, _, raw_err = _todoist_http("POST", f"/tasks/{encoded_id}", tok, payload=req_body, timeout=6.0)
+            if 200 <= st_code < 300 and move_project_id:
+                st_code, _, raw_err = _todoist_http(
+                    "POST", f"/tasks/{encoded_id}/move", tok, payload={"project_id": move_project_id}, timeout=6.0
+                )
             if 200 <= st_code < 300:
                 links_map = load_todoist_links()
                 linked_local_ids = [int(k) for k, v in links_map.items() if v == td_id and k.isdigit()]

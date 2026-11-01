@@ -2,18 +2,23 @@ import QtQuick
 import "../Theme.js" as Theme
 
 // Todoist-style schedule, horizon (day / week / month / date range / undated), time, recurrence, and priority popover.
+// In edit mode it is the full task editor: title, detail, category/project, and two-step delete.
 Rectangle {
   id: root
 
   property bool open: false
   property string titleText: ""
   property bool isTodoist: false
+  property bool editMode: false
+  property var categories: []           // local categories [{id, name, color}]
+  property var projects: []             // Todoist projects [{id, name}]
   property var tokens: ({})
   property string lang: "en"
   property string fontFamily: "Sans Serif"
 
   signal applied(var schedule)
   signal cancelled()
+  signal deleteRequested()
 
   visible: open
   width: 348
@@ -33,11 +38,28 @@ Rectangle {
   property string pickingSide: "start"  // "start" | "end" (for "range")
   property int calYear: 2026
   property int calMonth: 10             // 1..12
+  property string todayIso: ""
+  property int draftCategoryId: 0
+  property string draftProjectId: ""
+  property bool deleteArmed: false
+  // Values at open time; save sends only what differs from these
+  property var _init: ({})
 
-  readonly property bool isEditingText: timeInput.activeFocus
+  readonly property bool isEditingText: timeInput.activeFocus || titleInput.activeFocus || detailInput.activeFocus
 
   function releaseTextFocus() {
     if (timeInput.activeFocus) timeInput.focus = false
+    if (titleInput.activeFocus) titleInput.focus = false
+    if (detailInput.activeFocus) detailInput.focus = false
+  }
+
+  // Tab order inside the editor: none (calendar keys) -> title -> detail -> none
+  function _stepTextFocus(delta) {
+    var stops = [null, titleInput, detailInput]
+    var cur = titleInput.activeFocus ? 1 : (detailInput.activeFocus ? 2 : 0)
+    var next = (cur + delta + stops.length) % stops.length
+    if (stops[next]) stops[next].forceActiveFocus()
+    else releaseTextFocus()
   }
 
   function _syncCalendarToDay(isoStr) {
@@ -49,8 +71,16 @@ Rectangle {
   function openFor(initObj) {
     var src = initObj || ({})
     var todayIso = Theme.toIsoDay(new Date())
+    root.todayIso = todayIso
     titleText = String(src.titleText || "")
     isTodoist = !!src.isTodoist
+    editMode = !!src.editMode
+    titleInput.text = titleText
+    detailInput.text = String(src.detail || "")
+    draftCategoryId = Number(src.categoryId) || 0
+    draftProjectId = String(src.projectId || "")
+    deleteArmed = false
+    deleteArmTimer.stop()
     var sc = String(src.scope || "day")
     if (["day", "week", "month", "range", "inbox"].indexOf(sc) === -1) sc = "day"
     draftScope = sc
@@ -83,7 +113,16 @@ Rectangle {
     draftPriority = Math.max(1, Math.min(4, pr))
     pickingSide = "start"
     _syncCalendarToDay(draftDay || todayIso)
+    _init = {
+      title: titleInput.text.trim(),
+      detail: detailInput.text.trim(),
+      categoryId: draftCategoryId,
+      projectId: draftProjectId,
+      priority: draftPriority,
+      sched: JSON.stringify(_scheduleOut())
+    }
     open = true
+    if (editMode) titleInput.forceActiveFocus()
   }
 
   function _sanitizeTimeText(raw) {
@@ -212,9 +251,8 @@ Rectangle {
     return base
   }
 
-  function applyNow() {
+  function _scheduleOut() {
     var cleanTm = draftScope === "inbox" ? "" : _sanitizeTimeText(timeInput.text)
-    draftDueTime = cleanTm
     var outScope = draftScope
     var outDay = draftDay || Theme.toIsoDay(new Date())
     var outEnd = draftEndDay
@@ -222,21 +260,73 @@ Rectangle {
       outScope = "day"
       outEnd = ""
     }
-    root.open = false
-    root.applied({
+    return {
       scope: outScope,
       day: outDay,
       endDay: (outScope === "week" || outScope === "month" || outScope === "range") ? outEnd : "",
       dueTime: cleanTm,
-      recurrence: outScope === "inbox" ? "" : draftRecurrence,
-      priority: draftPriority
-    })
+      recurrence: outScope === "inbox" ? "" : draftRecurrence
+    }
+  }
+
+  // Only changed fields, so untouched Todoist due strings (e.g. "every 2 weeks") are never rewritten
+  function _editPatch(sched) {
+    var patch = ({})
+    var t = titleInput.text.trim()
+    if (t !== "" && t !== _init.title) patch.title = t
+    var d = detailInput.text.trim()
+    if (d !== _init.detail) patch.detail = d
+    if (draftPriority !== _init.priority) patch.priority = draftPriority
+    if (!isTodoist && draftCategoryId !== _init.categoryId) patch.categoryId = draftCategoryId
+    if (isTodoist && draftProjectId !== "" && draftProjectId !== _init.projectId) patch.projectId = draftProjectId
+    if (JSON.stringify(sched) !== _init.sched) {
+      patch.scope = sched.scope
+      patch.day = sched.day
+      patch.endDay = sched.endDay
+      patch.dueTime = sched.dueTime
+      patch.recurrence = sched.recurrence
+      if (isTodoist) patch.clearDue = sched.scope === "inbox"
+    }
+    return patch
+  }
+
+  function applyNow() {
+    var sched = _scheduleOut()
+    draftDueTime = sched.dueTime
+    var patch = editMode ? _editPatch(sched) : null
+    sched.priority = draftPriority
+    if (patch) sched.patch = patch
+    releaseTextFocus()
+    root.open = false
+    root.applied(sched)
   }
 
   function cancelNow() {
     releaseTextFocus()
+    deleteArmTimer.stop()
+    deleteArmed = false
     root.open = false
     root.cancelled()
+  }
+
+  function pressDelete() {
+    if (!deleteArmed) {
+      deleteArmed = true
+      deleteArmTimer.restart()
+      return
+    }
+    deleteArmTimer.stop()
+    deleteArmed = false
+    releaseTextFocus()
+    root.open = false
+    root.deleteRequested()
+  }
+
+  Timer {
+    id: deleteArmTimer
+    interval: 3500
+    repeat: false
+    onTriggered: root.deleteArmed = false
   }
 
   function _nudgeDay(step) {
@@ -267,13 +357,18 @@ Rectangle {
     if (!root.open) return false
     var k = event.key
     if (k === Qt.Key_Escape) {
-      if (timeInput.activeFocus) {
-        timeInput.focus = false
+      if (isEditingText) {
+        releaseTextFocus()
         return true
       }
       cancelNow()
       return true
     }
+    if (editMode && (k === Qt.Key_Tab || k === Qt.Key_Backtab)) {
+      _stepTextFocus((k === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier)) ? -1 : 1)
+      return true
+    }
+    if (titleInput.activeFocus || detailInput.activeFocus) return false
     if (timeInput.activeFocus) {
       if (k === Qt.Key_Return || k === Qt.Key_Enter) {
         timeInput.focus = false
@@ -309,10 +404,11 @@ Rectangle {
     // Header
     Item {
       width: parent.width
-      height: 22
+      height: root.editMode ? 28 : 22
 
       Text {
         textFormat: Text.PlainText
+        visible: !root.editMode
         anchors.left: parent.left
         anchors.right: closeBtn.left
         anchors.rightMargin: 8
@@ -325,6 +421,50 @@ Rectangle {
         font.weight: Font.DemiBold
         color: root.tokens.ink || "#ffffff"
         elide: Text.ElideRight
+      }
+
+      Rectangle {
+        visible: root.editMode
+        anchors.left: parent.left
+        anchors.right: closeBtn.left
+        anchors.rightMargin: 8
+        anchors.verticalCenter: parent.verticalCenter
+        height: 28
+        radius: 6
+        color: root.tokens.card2 || "#1e1e24"
+        border.width: 1
+        border.color: titleInput.activeFocus
+          ? (root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.28))
+          : (root.tokens.line || Qt.rgba(1, 1, 1, 0.08))
+
+        TextInput {
+          id: titleInput
+          anchors.fill: parent
+          anchors.leftMargin: 8
+          anchors.rightMargin: 8
+          verticalAlignment: TextInput.AlignVCenter
+          font.family: root.fontFamily
+          font.pixelSize: 12
+          font.weight: Font.DemiBold
+          color: root.tokens.ink || "#ffffff"
+          selectByMouse: true
+          clip: true
+          // Handled here and accepted, so the Return never propagates to the list's Enter handler
+          Keys.onReturnPressed: function(event) { event.accepted = true; root.applyNow() }
+          Keys.onEnterPressed: function(event) { event.accepted = true; root.applyNow() }
+        }
+
+        Text {
+          textFormat: Text.PlainText
+          visible: titleInput.text.length === 0
+          anchors.verticalCenter: parent.verticalCenter
+          anchors.left: parent.left
+          anchors.leftMargin: 8
+          text: Theme.t(root.lang, "Görev adı", "Task title")
+          font.family: root.fontFamily
+          font.pixelSize: 12
+          color: root.tokens.muted || "#8a8d96"
+        }
       }
 
       Rectangle {
@@ -351,6 +491,117 @@ Rectangle {
           hoverEnabled: true
           cursorShape: Qt.PointingHandCursor
           onClicked: root.cancelNow()
+        }
+      }
+    }
+
+    // Detail / description (multi-line)
+    Rectangle {
+      visible: root.editMode
+      width: parent.width
+      height: Math.min(76, Math.max(26, detailInput.implicitHeight + 10))
+      radius: 6
+      color: root.tokens.card2 || "#1e1e24"
+      border.width: 1
+      border.color: detailInput.activeFocus
+        ? (root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.28))
+        : (root.tokens.line || Qt.rgba(1, 1, 1, 0.08))
+      clip: true
+
+      TextEdit {
+        id: detailInput
+        textFormat: Text.PlainText
+        anchors.fill: parent
+        anchors.margins: 5
+        anchors.leftMargin: 8
+        anchors.rightMargin: 8
+        font.family: root.fontFamily
+        font.pixelSize: 11
+        color: root.tokens.secondary || "#b4b4bc"
+        wrapMode: TextEdit.Wrap
+        selectByMouse: true
+        Keys.onTabPressed: function(event) { root._stepTextFocus(1); event.accepted = true }
+        Keys.onBacktabPressed: function(event) { root._stepTextFocus(-1); event.accepted = true }
+      }
+
+      Text {
+        textFormat: Text.PlainText
+        visible: detailInput.text.length === 0
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.leftMargin: 8
+        anchors.topMargin: 5
+        text: Theme.t(root.lang, "Açıklama", "Description")
+        font.family: root.fontFamily
+        font.pixelSize: 11
+        color: root.tokens.muted || "#8a8d96"
+      }
+    }
+
+    // Category (local) or project (Todoist) chips
+    Flow {
+      visible: root.editMode && (root.isTodoist ? root.projects.length > 0 : root.categories.length > 0)
+      width: parent.width
+      spacing: 5
+
+      Repeater {
+        model: root.editMode
+          ? (root.isTodoist
+              ? root.projects
+              : [{ id: 0, name: Theme.t(root.lang, "Kategorisiz", "No category"), color: "" }].concat(root.categories))
+          : []
+
+        delegate: Rectangle {
+          required property var modelData
+          readonly property bool active: root.isTodoist
+            ? String(modelData.id) === root.draftProjectId
+            : Number(modelData.id) === root.draftCategoryId
+          width: bucketChipRow.implicitWidth + 14
+          height: 22
+          radius: 6
+          color: active
+            ? (root.tokens.raised || "#282830")
+            : (bucketChipMa.containsMouse ? (root.tokens.raised || "#282830") : (root.tokens.card2 || "#1e1e24"))
+          border.width: 1
+          border.color: active
+            ? (root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.24))
+            : (root.tokens.line || Qt.rgba(1, 1, 1, 0.08))
+
+          Row {
+            id: bucketChipRow
+            anchors.centerIn: parent
+            spacing: 4
+
+            Rectangle {
+              visible: !root.isTodoist && String(modelData.color || "") !== ""
+              anchors.verticalCenter: parent.verticalCenter
+              width: 7
+              height: 7
+              radius: 4
+              color: modelData.color || "transparent"
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              anchors.verticalCenter: parent.verticalCenter
+              text: (root.isTodoist ? "#" : "") + String(modelData.name || "")
+              font.family: root.fontFamily
+              font.pixelSize: 10
+              font.weight: active ? Font.DemiBold : Font.Normal
+              color: active ? (root.tokens.ink || "#ffffff") : (root.tokens.secondary || "#b4b4bc")
+            }
+          }
+
+          MouseArea {
+            id: bucketChipMa
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              if (root.isTodoist) root.draftProjectId = String(modelData.id)
+              else root.draftCategoryId = Number(modelData.id) || 0
+            }
+          }
         }
       }
     }
@@ -575,6 +826,7 @@ Rectangle {
               : root.draftDay
             readonly property bool isEdge: cellIso !== "" && (cellIso === spanStart || cellIso === spanEnd)
             readonly property bool inSpan: cellIso !== "" && spanStart !== "" && spanEnd !== "" && cellIso >= spanStart && cellIso <= spanEnd
+            readonly property bool isToday: cellIso !== "" && cellIso === root.todayIso
 
             Rectangle {
               visible: modelData.day > 0
@@ -587,6 +839,8 @@ Rectangle {
                 : (inSpan
                     ? (root.tokens.raised || "#282830")
                     : (dayCellMa.containsMouse ? (root.tokens.card2 || "#1e1e24") : "transparent"))
+              border.width: isToday ? 2 : 0
+              border.color: isEdge ? (root.tokens.primaryInk || "#0a0a0c") : (root.tokens.ink || "#ffffff")
 
               Text {
                 textFormat: Text.PlainText
@@ -944,6 +1198,39 @@ Rectangle {
         spacing: 6
 
         Rectangle {
+          visible: root.editMode
+          width: deleteLbl.implicitWidth + 18
+          height: 28
+          radius: 7
+          color: root.deleteArmed
+            ? Theme.withAlpha(root.tokens.danger || "#e06458", deleteActMa.containsMouse ? 0.34 : 0.22)
+            : (deleteActMa.containsMouse ? Theme.withAlpha(root.tokens.danger || "#e06458", 0.14) : (root.tokens.card2 || "#1e1e24"))
+          border.width: 1
+          border.color: (root.deleteArmed || deleteActMa.containsMouse)
+            ? (root.tokens.danger || "#e06458")
+            : (root.tokens.line || Qt.rgba(1, 1, 1, 0.08))
+
+          Text {
+            textFormat: Text.PlainText
+            id: deleteLbl
+            anchors.centerIn: parent
+            text: root.deleteArmed ? Theme.t(root.lang, "Silinsin mi?", "Delete?") : Theme.t(root.lang, "Sil", "Delete")
+            font.family: root.fontFamily
+            font.pixelSize: 11
+            font.weight: root.deleteArmed ? Font.DemiBold : Font.Normal
+            color: (root.deleteArmed || deleteActMa.containsMouse) ? (root.tokens.danger || "#e06458") : (root.tokens.muted || "#8a8d96")
+          }
+
+          MouseArea {
+            id: deleteActMa
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.pressDelete()
+          }
+        }
+
+        Rectangle {
           width: cancelLbl.implicitWidth + 18
           height: 28
           radius: 7
@@ -981,7 +1268,7 @@ Rectangle {
             textFormat: Text.PlainText
             id: applyLbl
             anchors.centerIn: parent
-            text: Theme.t(root.lang, "Uygula", "Apply")
+            text: root.editMode ? Theme.t(root.lang, "Kaydet", "Save") : Theme.t(root.lang, "Uygula", "Apply")
             font.family: root.fontFamily
             font.pixelSize: 11
             font.weight: Font.DemiBold

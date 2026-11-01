@@ -663,6 +663,10 @@ class HouraBackendAndMarketplaceTests(unittest.TestCase):
                         self.send_response(404)
                         self.end_headers()
                         return
+                    if self.path.endswith("/move"):
+                        item["project_id"] = payload.get("project_id", item.get("project_id"))
+                        self._send_json(200, item)
+                        return
                     if "priority" in payload:
                         item["priority"] = int(payload["priority"])
                     if "content" in payload:
@@ -727,6 +731,23 @@ class HouraBackendAndMarketplaceTests(unittest.TestCase):
             self.assertEqual(td_task["priority"], 4)
             self.assertEqual(td_task["projectId"], "p_res")
             self.assertTrue(td_task["isRecurring"])
+            self.assertEqual(td_task["recurrence"], "weekly")
+
+            # Editor save: title + description + project move in one call; due stays untouched
+            moved_td = self.rpc(
+                "update-todoist-task",
+                {"todoistId": "td_new_1", "title": "Review bench table", "detail": "p95", "projectId": "p_inb"},
+                via_stdin=True,
+            )
+            self.assertTrue(moved_td["todoistUpdated"])
+            moved_task = moved_td["todoist"]["tasks"][0]
+            self.assertEqual(moved_task["title"], "Review bench table")
+            self.assertEqual(moved_task["projectId"], "p_inb")
+            self.assertEqual(moved_task["recurrence"], "weekly")
+            self.assertIn(("/api/v1/tasks/td_new_1/move", {"project_id": "p_inb"}), captured_posts)
+            edit_body = [b for path_, b in captured_posts if path_ == "/api/v1/tasks/td_new_1"][-1]
+            self.assertNotIn("project_id", edit_body)
+            self.assertNotIn("due_string", edit_body)
 
             # Update Todoist task priority & clear due date ("inbox" -> due_string: "no date")
             edited_td = self.rpc(

@@ -18,6 +18,8 @@ Item {
   property int _popoverLocalTodoId: 0
   property string _popoverTodoistId: ""
   property string todoistNoticeText: ""
+  property string pendingDeleteKey: ""       // nav key of the row armed for two-step delete
+  property Item _kbRowItem: null             // keyboard-selected row, used to anchor the editor
 
   readonly property var horizonTabs: [
     { key: "today", tr: "Bugün", en: "Today" },
@@ -129,6 +131,11 @@ Item {
       schedulePopover.cancelNow()
       return true
     }
+    if (pendingDeleteKey !== "") {
+      pendingDeleteTimer.stop()
+      pendingDeleteKey = ""
+      return true
+    }
     if (todayCancelBtn.confirming) {
       todayCancelTimer.stop()
       todayCancelBtn.confirming = false
@@ -169,6 +176,63 @@ Item {
     var maxY = Math.max(12, root.height - schedulePopover.height - 14)
     schedulePopover.x = Math.round(Math.max(12, Math.min(maxX, pt.x)))
     schedulePopover.y = Math.round(Math.max(12, Math.min(maxY, pt.y)))
+  }
+
+  function openTodoEditor(td, sourceItem) {
+    root._openSchedulePopoverAt("editLocal", {
+      todoId: td.id,
+      scope: td.scope || "day",
+      day: td.day || "",
+      endDay: td.endDay || "",
+      dueTime: td.dueTime || "",
+      recurrence: td.recurrence || "",
+      priority: Number(td.priority) || 1,
+      isTodoist: false,
+      editMode: true,
+      titleText: td.title || "",
+      detail: td.detail || "",
+      categoryId: Number(td.categoryId) || 0
+    }, sourceItem, 12, sourceItem ? sourceItem.height + 4 : 0)
+  }
+
+  // Todoist keeps only the end date of a week/month/range, so the editor opens it as a single day.
+  function openTodoistEditor(tdist, sourceItem) {
+    var hasDue = String(tdist.dueDate || "") !== ""
+    root._openSchedulePopoverAt("editTodoist", {
+      todoistId: String(tdist.id || ""),
+      scope: hasDue ? "day" : "inbox",
+      day: hasDue ? String(tdist.dueDate) : "",
+      endDay: "",
+      dueTime: String(tdist.dueTime || ""),
+      recurrence: String(tdist.recurrence || ""),
+      priority: Number(tdist.priority) || 1,
+      isTodoist: true,
+      editMode: true,
+      titleText: tdist.title || "",
+      detail: tdist.description || "",
+      projectId: String(tdist.projectId || "")
+    }, sourceItem, 12, sourceItem ? sourceItem.height + 4 : 0)
+  }
+
+  // Two-step delete: first press arms the row for 3.5 s, second press on the same row deletes.
+  function pressDeleteRow(navKey, kind, item) {
+    if (!service || !item) return
+    if (pendingDeleteKey !== navKey) {
+      pendingDeleteKey = navKey
+      pendingDeleteTimer.restart()
+      return
+    }
+    pendingDeleteTimer.stop()
+    pendingDeleteKey = ""
+    if (kind === "todo") service.deleteTodo(item.id)
+    else if (kind === "todoist" && item.id) service.deleteTodoistTask(item.id)
+  }
+
+  Timer {
+    id: pendingDeleteTimer
+    interval: 3500
+    repeat: false
+    onTriggered: root.pendingDeleteKey = ""
   }
 
   function _focusStops() {
@@ -330,19 +394,21 @@ Item {
     }
     if (k === Qt.Key_Return || k === Qt.Key_Enter) {
       kbActive = true
+      var shift = !!(mods & Qt.ShiftModifier)
       if (cur.kind === "todo") {
-        if (mods & Qt.ShiftModifier) service.openNewSessionForTodo(cur.item)
-        else service.cycleTodoState(cur.item.id)
+        if (shift) service.openNewSessionForTodo(cur.item)
+        else openTodoEditor(cur.item, _kbRowItem)
       } else if (cur.kind === "todoist") {
-        service.openNewSessionForTodoist(cur.item)
+        if (shift) service.openNewSessionForTodoist(cur.item)
+        else openTodoistEditor(cur.item, _kbRowItem)
       } else if (cur.kind === "weekly") {
         service.openNewSessionForWeekly(cur.item)
       }
       return true
     }
-    if ((k === Qt.Key_Delete || k === Qt.Key_Backspace) && cur.kind === "todo") {
+    if ((k === Qt.Key_Delete || k === Qt.Key_Backspace) && (cur.kind === "todo" || cur.kind === "todoist")) {
       kbActive = true
-      service.deleteTodo(cur.item.id)
+      pressDeleteRow(cur.key, cur.kind, cur.item)
       return true
     }
     return false
@@ -849,7 +915,7 @@ Item {
                       if (td.recurrenceLabel) parts.push("↻ " + String(td.recurrenceLabel))
                       return parts.join(" · ")
                     }
-                    onKbSelectedChanged: if (kbSelected) root.ensureItemVisible(todoRowRect)
+                    onKbSelectedChanged: if (kbSelected) { root.ensureItemVisible(todoRowRect); root._kbRowItem = todoRowRect }
                     width: todoCardInner.width
                     height: Math.max(38, tdCol.implicitHeight + 14)
                     radius: 8
@@ -912,6 +978,12 @@ Item {
                           font.weight: st === 1 ? Font.Medium : Font.Normal
                           font.strikeout: st === 2
                           color: st === 2 ? (root.tokens.muted || "#777777") : (root.tokens.ink || "#ffffff")
+
+                          MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.openTodoEditor(td, todoRowRect)
+                          }
                         }
 
                         Text {
@@ -958,17 +1030,7 @@ Item {
                               anchors.fill: parent
                               cursorShape: Qt.PointingHandCursor
                               onClicked: {
-                                root._openSchedulePopoverAt("editLocal", {
-                                  todoId: td.id,
-                                  scope: td.scope || "day",
-                                  day: td.day || "",
-                                  endDay: td.endDay || "",
-                                  dueTime: td.dueTime || "",
-                                  recurrence: td.recurrence || "",
-                                  priority: todoRowRect.prio,
-                                  isTodoist: false,
-                                  titleText: td.title || ""
-                                }, todoRowRect, 12, todoRowRect.height + 4)
+                                root.openTodoEditor(td, todoRowRect)
                               }
                             }
                           }
@@ -1003,17 +1065,7 @@ Item {
                               anchors.fill: parent
                               cursorShape: Qt.PointingHandCursor
                               onClicked: {
-                                root._openSchedulePopoverAt("editLocal", {
-                                  todoId: td.id,
-                                  scope: td.scope || "day",
-                                  day: td.day || "",
-                                  endDay: td.endDay || "",
-                                  dueTime: td.dueTime || "",
-                                  recurrence: td.recurrence || "",
-                                  priority: todoRowRect.prio,
-                                  isTodoist: false,
-                                  titleText: td.title || ""
-                                }, todoRowRect, 12, todoRowRect.height + 4)
+                                root.openTodoEditor(td, todoRowRect)
                               }
                             }
                           }
@@ -1119,17 +1171,7 @@ Item {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                              root._openSchedulePopoverAt("editLocal", {
-                                todoId: td.id,
-                                scope: td.scope || "day",
-                                day: td.day || "",
-                                endDay: td.endDay || "",
-                                dueTime: td.dueTime || "",
-                                recurrence: td.recurrence || "",
-                                priority: todoRowRect.prio,
-                                isTodoist: false,
-                                titleText: td.title || ""
-                              }, todoRowRect, 12, todoRowRect.height + 4)
+                              root.openTodoEditor(td, todoRowRect)
                             }
                           }
                         }
@@ -1160,18 +1202,26 @@ Item {
                         }
 
                         Rectangle {
-                          visible: rowHover.hovered || todoRowRect.kbSelected
-                          width: 22
+                          readonly property bool armed: root.pendingDeleteKey === todoRowRect.navKey
+                          visible: rowHover.hovered || todoRowRect.kbSelected || armed
+                          width: armed ? delLbl.implicitWidth + 14 : 22
                           height: 22
                           radius: 6
-                          color: delHov.containsMouse ? (root.tokens.raised || "#2b2b33") : "transparent"
+                          color: armed
+                            ? Theme.withAlpha(root.tokens.danger || "#e06458", 0.22)
+                            : (delHov.containsMouse ? (root.tokens.raised || "#2b2b33") : "transparent")
+                          border.width: armed ? 1 : 0
+                          border.color: root.tokens.danger || "#e06458"
 
                           Text {
                             textFormat: Text.PlainText
+                            id: delLbl
                             anchors.centerIn: parent
-                            text: "×"
-                            font.pixelSize: 14
-                            color: root.tokens.muted || "#888888"
+                            text: parent.armed ? Theme.t(root.lang, "Silinsin mi?", "Delete?") : "×"
+                            font.family: root.fontFamily
+                            font.pixelSize: parent.armed ? 10 : 14
+                            font.weight: parent.armed ? Font.DemiBold : Font.Normal
+                            color: parent.armed ? (root.tokens.danger || "#e06458") : (root.tokens.muted || "#888888")
                           }
 
                           MouseArea {
@@ -1179,7 +1229,7 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: if (root.service) root.service.deleteTodo(td.id)
+                            onClicked: root.pressDeleteRow(todoRowRect.navKey, "todo", td)
                           }
                         }
                       }
@@ -1468,7 +1518,7 @@ Item {
                       readonly property string navKey: "td:" + String(tdist.key || tdist.id || index)
                       readonly property int navIdx: root.navIndexByKey[navKey] !== undefined ? Number(root.navIndexByKey[navKey]) : -1
                       readonly property bool kbSelected: root.kbPageActive && root.kbActive && navIdx >= 0 && root.kbIndex === navIdx
-                      onKbSelectedChanged: if (kbSelected) root.ensureItemVisible(tdistRow)
+                      onKbSelectedChanged: if (kbSelected) { root.ensureItemVisible(tdistRow); root._kbRowItem = tdistRow }
                       width: todoistInner.width
                       height: Math.max(32, tdistTitleTxt.implicitHeight + 12)
                       radius: 7
@@ -1483,11 +1533,7 @@ Item {
                       MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                          if (root.service) {
-                            root.service.openNewSessionForTodoist(tdistRow.tdist)
-                          }
-                        }
+                        onClicked: root.openTodoistEditor(tdistRow.tdist, tdistRow)
                       }
 
                       Row {
@@ -1612,18 +1658,7 @@ Item {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                              var hasDue = String(tdistRow.tdist.dueDate || "") !== ""
-                              root._openSchedulePopoverAt("editTodoist", {
-                                todoistId: String(tdistRow.tdist.id || ""),
-                                scope: hasDue ? "day" : "inbox",
-                                day: hasDue ? String(tdistRow.tdist.dueDate) : "",
-                                endDay: "",
-                                dueTime: String(tdistRow.tdist.dueTime || ""),
-                                recurrence: "",
-                                priority: tdistRow.prio,
-                                isTodoist: true,
-                                titleText: tdistRow.tdist.title || ""
-                              }, tdistRow, 12, tdistRow.height + 4)
+                              root.openTodoistEditor(tdistRow.tdist, tdistRow)
                             }
                           }
                         }
@@ -1662,13 +1697,61 @@ Item {
                           }
                         }
 
-                        Text {
-                          textFormat: Text.PlainText
+                        // Start focus session with this Todoist task
+                        Rectangle {
                           visible: tdistHover.hovered || tdistRow.kbSelected
                           anchors.verticalCenter: parent.verticalCenter
-                          text: "▶"
-                          font.pixelSize: 10
-                          color: root.tokens.ink || "#ffffff"
+                          width: 22
+                          height: 22
+                          radius: 6
+                          color: startTdSessMa.containsMouse ? (root.tokens.raised || "#2b2b33") : "transparent"
+
+                          Text {
+                            textFormat: Text.PlainText
+                            anchors.centerIn: parent
+                            text: "▶"
+                            font.pixelSize: 10
+                            color: root.tokens.ink || "#ffffff"
+                          }
+
+                          MouseArea {
+                            id: startTdSessMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: if (root.service) root.service.openNewSessionForTodoist(tdistRow.tdist)
+                          }
+                        }
+
+                        // Armed by Delete key; a click or a second Delete confirms
+                        Rectangle {
+                          visible: root.pendingDeleteKey === tdistRow.navKey
+                          anchors.verticalCenter: parent.verticalCenter
+                          width: tdDelLbl.implicitWidth + 14
+                          height: 22
+                          radius: 6
+                          color: Theme.withAlpha(root.tokens.danger || "#e06458", tdDelMa.containsMouse ? 0.34 : 0.22)
+                          border.width: 1
+                          border.color: root.tokens.danger || "#e06458"
+
+                          Text {
+                            textFormat: Text.PlainText
+                            id: tdDelLbl
+                            anchors.centerIn: parent
+                            text: Theme.t(root.lang, "Silinsin mi?", "Delete?")
+                            font.family: root.fontFamily
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                            color: root.tokens.danger || "#e06458"
+                          }
+
+                          MouseArea {
+                            id: tdDelMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.pressDeleteRow(tdistRow.navKey, "todoist", tdistRow.tdist)
+                          }
                         }
                       }
                     }
@@ -2036,6 +2119,18 @@ Item {
     tokens: root.tokens
     lang: root.lang
     fontFamily: root.fontFamily
+    categories: root.service ? (root.service.categories || []) : []
+    projects: root.todoist.projects || []
+    // Editor height changes with content; keep it inside the page
+    onHeightChanged: y = Math.round(Math.max(12, Math.min(y, root.height - height - 14)))
+    onDeleteRequested: {
+      if (!root.service) return
+      if (root._popoverTargetKind === "editLocal" && root._popoverLocalTodoId > 0) {
+        root.service.deleteTodo(root._popoverLocalTodoId)
+      } else if (root._popoverTargetKind === "editTodoist" && root._popoverTodoistId !== "") {
+        root.service.deleteTodoistTask(root._popoverTodoistId)
+      }
+    }
     onApplied: function(sched) {
       if (root._popoverTargetKind === "localComposer") {
         localComposer.applySchedulePatch(sched)
@@ -2044,17 +2139,9 @@ Item {
         todoistComposer.applySchedulePatch(sched)
         todoistComposer.focusTitle()
       } else if (root._popoverTargetKind === "editLocal" && root._popoverLocalTodoId > 0 && root.service) {
-        root.service.updateTodo(root._popoverLocalTodoId, sched)
+        if (Object.keys(sched.patch).length > 0) root.service.updateTodo(root._popoverLocalTodoId, sched.patch)
       } else if (root._popoverTargetKind === "editTodoist" && root._popoverTodoistId !== "" && root.service) {
-        root.service.updateTodoistTask(root._popoverTodoistId, {
-          scope: sched.scope,
-          day: sched.day,
-          endDay: sched.endDay,
-          dueTime: sched.dueTime,
-          recurrence: sched.recurrence,
-          priority: sched.priority,
-          clearDue: sched.scope === "inbox"
-        }, null)
+        if (Object.keys(sched.patch).length > 0) root.service.updateTodoistTask(root._popoverTodoistId, sched.patch, null)
       }
     }
   }
