@@ -748,9 +748,10 @@ Item {
 
             Text {
               textFormat: Text.PlainText
-              x: 2
-              y: 1
-              visible: noteField.text.length === 0
+              // Same origin as the edit's first line; a plain Text takes no mouse input, clicks reach noteField.
+              x: noteField.leftPadding
+              y: noteField.topPadding
+              visible: noteField.text.length === 0 && noteField.preeditText.length === 0
               text: Theme.t(root.lang, "Aklına geleni yaz…", "Write down whatever comes to mind…")
               font.family: root.fontFamily
               font.pixelSize: 13
