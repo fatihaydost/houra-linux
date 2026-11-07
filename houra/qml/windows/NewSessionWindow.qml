@@ -12,6 +12,23 @@ import "../components"
 Scope {
   id: root
 
+  // Keyboard focus ring drawn outside its parent control (same look as Settings/SessionEditor)
+  component KbRing: Rectangle {
+    property bool on: false
+    visible: on
+    anchors.fill: parent
+    anchors.margins: -3
+    radius: (parent && parent.radius ? parent.radius : 4) + 3
+    color: "transparent"
+    border.width: 2
+    border.color: root.tokens.accent || root.tokens.ink || "#ffffff"
+    z: 5
+  }
+
+  function kbOn(zone) {
+    return focusSection === zone && !goalField.activeFocus && !secondaryInputFocused
+  }
+
   property var service: null
   property bool open: false
   property bool closingFromHost: false
@@ -284,11 +301,16 @@ Scope {
     if (hasPickerItems) stops.push("tasks")
     stops.push("newTaskTitle")
     stops.push("newTaskDetail")
+    stops.push("addTask")
+    stops.push("priority")
+    if (todoistConnected) stops.push("todoistSync")
     stops.push("rhythm")
     if (rhythmMode === "custom") {
       stops.push("customWork")
       stops.push("customRest")
     }
+    stops.push("cancel")
+    stops.push("start")
 
     var curZone = focusSection
     if (goalField.activeFocus) curZone = "goal"
@@ -651,9 +673,21 @@ Scope {
 
           if (mods & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) return
 
-          if (root.focusSection === "repeat" && (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space)) {
+          if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) {
+            var act = ({
+              repeat: root.repeatLast,
+              addTask: root.addInlineTask,
+              todoistSync: function() { root.inlineCreateOnTodoist = !root.inlineCreateOnTodoist },
+              cancel: root.closeModal,
+              start: root.submitStart
+            })[root.focusSection]
+            if (act) { event.accepted = true; act(); return }
+          }
+
+          if (root.focusSection === "priority" && (k === Qt.Key_Left || k === Qt.Key_Right)) {
+            // pills read P1..P4 left to right, i.e. priority 4..1
+            root.inlineTaskPriority = Math.max(1, Math.min(4, root.inlineTaskPriority + (k === Qt.Key_Left ? 1 : -1)))
             event.accepted = true
-            root.repeatLast()
             return
           }
 
@@ -699,15 +733,17 @@ Scope {
 
         Flickable {
           anchors.fill: parent
-          anchors.margins: 22
+          anchors.margins: 19 // 22 minus room for the 3 px outer focus rings
           contentWidth: width
-          contentHeight: formCol.implicitHeight
+          contentHeight: formCol.implicitHeight + 6
           clip: true
           boundsBehavior: Flickable.StopAtBounds
 
           Column {
             id: formCol
-            width: parent.width
+            x: 3
+            y: 3
+            width: parent.width - 6
             spacing: 16
 
             // Header
@@ -740,8 +776,10 @@ Scope {
                   height: 24
                   radius: 7
                   color: repeatHov.containsMouse ? (root.tokens.raised || "#282830") : (root.tokens.card2 || "#1f1f25")
-                  border.width: kbOn ? 2 : 1
-                  border.color: kbOn ? (root.tokens.accent || root.tokens.ink || "#ffffff") : (root.tokens.line || Qt.rgba(1, 1, 1, 0.10))
+                  border.width: 1
+                  border.color: root.tokens.line || Qt.rgba(1, 1, 1, 0.10)
+
+                  KbRing { on: parent.kbOn }
 
                   Text {
                     id: repeatLbl
@@ -813,13 +851,15 @@ Scope {
             Flickable {
               id: catFlick
               width: parent.width
-              height: 36
-              contentWidth: catRow.implicitWidth
-              contentHeight: 36
+              height: 42
+              contentWidth: catRow.implicitWidth + 6
+              contentHeight: 42
               clip: true
 
               Row {
                 id: catRow
+                x: 3
+                y: 4
                 spacing: 8
 
                 Repeater {
@@ -836,10 +876,10 @@ Scope {
                     color: picked
                       ? Theme.withAlpha(cat.color || "#4c8df0", 0.22)
                       : (catArea.containsMouse ? (root.tokens.raised || "#282830") : (root.tokens.card || "#17171c"))
-                    border.width: kbRing ? 2 : (picked ? 1.5 : 1)
-                    border.color: kbRing
-                      ? (root.tokens.ink || "#ffffff")
-                      : (picked ? (cat.color || "#4c8df0") : (root.tokens.line || Qt.rgba(1, 1, 1, 0.09)))
+                    border.width: picked ? 1.5 : 1
+                    border.color: picked ? (cat.color || "#4c8df0") : (root.tokens.line || Qt.rgba(1, 1, 1, 0.09))
+
+                    KbRing { on: catChoicePill.kbRing }
 
                     Row {
                       id: catPillRow
@@ -910,6 +950,8 @@ Scope {
                   selectByMouse: true
                   onActiveFocusChanged: if (activeFocus) root.focusSection = "goal"
                 }
+
+                KbRing { on: goalField.activeFocus; anchors.leftMargin: -6; anchors.rightMargin: -6 }
               }
 
               Rectangle {
@@ -1020,10 +1062,10 @@ Scope {
                 height: Math.min(138, pickerListCol.implicitHeight + 12)
                 radius: 10
                 color: root.tokens.card || "#17171c"
-                border.width: (root.focusSection === "tasks" && !goalField.activeFocus && !root.secondaryInputFocused) ? 1.5 : 1
-                border.color: (root.focusSection === "tasks" && !goalField.activeFocus && !root.secondaryInputFocused)
-                  ? (root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.28))
-                  : (root.tokens.line || Qt.rgba(1, 1, 1, 0.08))
+                border.width: 1
+                border.color: root.tokens.line || Qt.rgba(1, 1, 1, 0.08)
+
+                KbRing { on: root.kbOn("tasks") }
 
                 Flickable {
                   id: pickerFlick
@@ -1488,6 +1530,8 @@ Scope {
                     selectByMouse: true
                     onActiveFocusChanged: if (activeFocus) root.focusSection = "newTaskTitle"
                   }
+
+                  KbRing { on: newTaskTitle.activeFocus }
                 }
 
                 Rectangle {
@@ -1524,6 +1568,8 @@ Scope {
                     selectByMouse: true
                     onActiveFocusChanged: if (activeFocus) root.focusSection = "newTaskDetail"
                   }
+
+                  KbRing { on: newTaskDetail.activeFocus }
                 }
 
                 Rectangle {
@@ -1549,6 +1595,8 @@ Scope {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.addInlineTask()
                   }
+
+                  KbRing { on: root.kbOn("addTask") }
                 }
               }
 
@@ -1593,6 +1641,8 @@ Scope {
                       cursorShape: Qt.PointingHandCursor
                       onClicked: root.inlineTaskPriority = parent.pVal
                     }
+
+                    KbRing { on: parent.pSel && root.kbOn("priority") }
                   }
                 }
 
@@ -1629,6 +1679,8 @@ Scope {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.inlineCreateOnTodoist = !root.inlineCreateOnTodoist
                   }
+
+                  KbRing { on: root.kbOn("todoistSync") }
                 }
               }
             }
@@ -1677,7 +1729,7 @@ Scope {
                     color: picked
                       ? (root.tokens.raised || "#282830")
                       : (presetArea.containsMouse ? (root.tokens.card2 || "#1f1f25") : (root.tokens.card || "#16161b"))
-                    border.width: rhythmFocused ? 2 : (picked ? 1.5 : 1)
+                    border.width: picked ? 1.5 : 1
                     border.color: picked
                       ? (root.tokens.ink || "#ffffff")
                       : (root.tokens.line || Qt.rgba(1, 1, 1, 0.08))
@@ -1727,6 +1779,8 @@ Scope {
                       cursorShape: Qt.PointingHandCursor
                       onClicked: root.rhythmMode = modelData.mode
                     }
+
+                    KbRing { on: parent.rhythmFocused }
                   }
                 }
               }
@@ -1742,7 +1796,7 @@ Scope {
                 color: picked
                   ? (root.tokens.raised || "#282830")
                   : (customCardArea.containsMouse ? (root.tokens.card2 || "#1f1f25") : (root.tokens.card || "#16161b"))
-                border.width: rhythmFocused ? 2 : (picked ? 1.5 : 1)
+                border.width: picked ? 1.5 : 1
                 border.color: picked
                   ? (root.tokens.ink || "#ffffff")
                   : (root.tokens.line || Qt.rgba(1, 1, 1, 0.08))
@@ -1754,6 +1808,8 @@ Scope {
                   cursorShape: Qt.PointingHandCursor
                   onClicked: root.rhythmMode = "custom"
                 }
+
+                KbRing { on: parent.rhythmFocused }
 
                 Item {
                   anchors.fill: parent
@@ -1834,6 +1890,8 @@ Scope {
                         border.color: customWorkInput.activeFocus
                           ? (root.tokens.ink || "#ffffff")
                           : (root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.16))
+
+                        KbRing { on: customWorkInput.activeFocus }
 
                         TextInput {
                           id: customWorkInput
@@ -1917,6 +1975,8 @@ Scope {
                           ? (root.tokens.ink || "#ffffff")
                           : (root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.16))
 
+                        KbRing { on: customRestInput.activeFocus }
+
                         TextInput {
                           id: customRestInput
                           anchors.fill: parent
@@ -1971,7 +2031,7 @@ Scope {
                 color: picked
                   ? (root.tokens.raised || "#282830")
                   : (freeArea.containsMouse ? (root.tokens.card2 || "#1f1f25") : (root.tokens.card || "#16161b"))
-                border.width: rhythmFocused ? 2 : (picked ? 1.5 : 1)
+                border.width: picked ? 1.5 : 1
                 border.color: picked
                   ? (root.tokens.ink || "#ffffff")
                   : (root.tokens.line || Qt.rgba(1, 1, 1, 0.08))
@@ -2034,6 +2094,8 @@ Scope {
                   cursorShape: Qt.PointingHandCursor
                   onClicked: root.rhythmMode = "free"
                 }
+
+                KbRing { on: parent.rhythmFocused }
               }
             }
 
@@ -2089,6 +2151,8 @@ Scope {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.closeModal()
                   }
+
+                  KbRing { on: root.kbOn("cancel") }
                 }
 
                 Rectangle {
@@ -2105,7 +2169,7 @@ Scope {
                     anchors.centerIn: parent
                     text: {
                       if (root.rhythmMode === "free") {
-                        return Theme.t(root.lang, "Başlat · serbest", "Start · free")
+                        return Theme.t(root.lang, "Başlat · Serbest", "Start · Free")
                       }
                       if (root.rhythmMode === "custom") {
                         return Theme.t(root.lang, "Başlat · ", "Start · ") + root.customWorkMin + " + " + root.customRestMin + " " + Theme.t(root.lang, "dk", "min")
@@ -2125,6 +2189,8 @@ Scope {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.submitStart()
                   }
+
+                  KbRing { on: root.kbOn("start") }
                 }
               }
             }
