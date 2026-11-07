@@ -33,6 +33,17 @@ Scope {
   property var extraTasks: []
   property int inlineTaskPriority: 1
   property bool inlineCreateOnTodoist: false
+  readonly property var lastRepeat: {
+    var reps = (service && service.todayData) ? (service.todayData.recentRepeats || []) : []
+    return reps.length > 0 ? reps[0] : null
+  }
+
+  function repeatLast() {
+    var r = lastRepeat
+    if (!service || !r) return
+    closeModal()
+    service.quickStartSession(r.categoryId, r.goal, r.workMin, r.restMin)
+  }
 
   readonly property int selectedWorkMin: {
     if (rhythmMode === "25") return 25
@@ -267,6 +278,7 @@ Scope {
 
   function focusZoneStep(delta) {
     var stops = []
+    if (lastRepeat) stops.push("repeat")
     if (categories && categories.length > 0) stops.push("categories")
     stops.push("goal")
     if (hasPickerItems) stops.push("tasks")
@@ -639,6 +651,12 @@ Scope {
 
           if (mods & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) return
 
+          if (root.focusSection === "repeat" && (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space)) {
+            event.accepted = true
+            root.repeatLast()
+            return
+          }
+
           if (k === Qt.Key_Return || k === Qt.Key_Enter) {
             event.accepted = true
             root.submitStart()
@@ -713,6 +731,43 @@ Scope {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 8
+
+                Rectangle {
+                  readonly property bool kbOn: root.focusSection === "repeat"
+                  visible: !!root.lastRepeat
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: repeatLbl.implicitWidth + 16
+                  height: 24
+                  radius: 7
+                  color: repeatHov.containsMouse ? (root.tokens.raised || "#282830") : (root.tokens.card2 || "#1f1f25")
+                  border.width: kbOn ? 2 : 1
+                  border.color: kbOn ? (root.tokens.accent || root.tokens.ink || "#ffffff") : (root.tokens.line || Qt.rgba(1, 1, 1, 0.10))
+
+                  Text {
+                    id: repeatLbl
+                    textFormat: Text.PlainText
+                    anchors.centerIn: parent
+                    width: Math.min(implicitWidth, 260)
+                    elide: Text.ElideRight
+                    text: {
+                      var r = root.lastRepeat
+                      if (!r) return ""
+                      var what = r.goal && r.goal !== r.categoryName ? r.goal : r.categoryName
+                      return "↻ " + Theme.t(root.lang, "Tekrarla: ", "Repeat: ") + what + " · " + (r.rhythmLabel || Theme.formatRhythm(r.workMin, r.restMin, root.lang))
+                    }
+                    font.family: root.fontFamily
+                    font.pixelSize: 11
+                    color: root.tokens.ink || "#ffffff"
+                  }
+
+                  MouseArea {
+                    id: repeatHov
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.repeatLast()
+                  }
+                }
 
                 Text {
                   textFormat: Text.PlainText
