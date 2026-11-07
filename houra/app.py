@@ -270,7 +270,8 @@ def main(argv: list[str] | None = None) -> int:
     QLocalServer.removeServer(APP_ID)
     server = QLocalServer(app)
     server.setSocketOptions(QLocalServer.UserAccessOption)
-    server.listen(APP_ID)
+    if not server.listen(APP_ID):  # e.g. a TMPDIR long enough to pass the 108-byte socket path limit
+        print(f"houra: commands disabled, cannot listen: {server.errorString()}", file=sys.stderr)
     state: dict = {"root": None, "queued": []}
 
     def run(c: str, a: str = "") -> str:
