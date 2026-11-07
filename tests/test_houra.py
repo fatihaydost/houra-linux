@@ -4,10 +4,12 @@ import json
 import os
 from pathlib import Path
 import re
+import sqlite3
 import stat
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 import wave
 
@@ -39,6 +41,79 @@ class HouraTests(unittest.TestCase):
             check=True,
         )
         return json.loads(proc.stdout.strip())
+
+    def _start(self, work_min: int, ago: int) -> int:
+        cid = self.rpc("snapshot")["categories"][0]["id"]
+        res = self.rpc("start-session", {"categoryId": cid, "workMin": work_min, "restMin": 10, "start": time.time() - ago})
+        return int(res["startedSession"]["id"])
+
+    def _set_checkpoint_age(self, sid: int, age: float, paused: bool = False) -> None:
+        p = Path(self.env["HOURA_STATE_DIR"]) / "live_session.json"
+        self.assertEqual(stat.S_IMODE(p.stat().st_mode), 0o600)
+        p.write_text(json.dumps({"id": sid, "paused": paused, "checkpointAt": time.time() - age}))
+
+    def _row(self, sid: int):
+        with sqlite3.connect(self.env["HOURA_DB"]) as c:
+            return c.execute("SELECT end, focus_sec, start FROM sessions WHERE id = ?", (sid,)).fetchone()
+
+    def test_abandoned_fixed_session_closes_with_checkpoint(self) -> None:
+        sid = self._start(50, 600)
+        self.rpc("checkpoint-session", {"sessionId": sid, "focusSec": 300})
+        self._set_checkpoint_age(sid, 400)  # app died ~7 min ago
+        self.rpc("snapshot")
+        end, fsec, start = self._row(sid)
+        self.assertEqual(fsec, 300)
+        self.assertAlmostEqual(end, start + 300, places=3)
+
+    def test_resume_does_not_count_downtime(self) -> None:
+        sid = self._start(50, 1200)
+        self.rpc("checkpoint-session", {"sessionId": sid, "focusSec": 120})
+        self._set_checkpoint_age(sid, 90)  # quick restart, 90 s gap
+        s = self.rpc("snapshot", {"resumeIfLive": True})["resumedSession"]
+        self.assertEqual((s["id"], s["elapsedSec"], s["paused"]), (sid, 120, False))
+
+    def test_paused_session_resumes_paused(self) -> None:
+        sid = self._start(25, 300)
+        self.rpc("checkpoint-session", {"sessionId": sid, "focusSec": 60, "paused": True})
+        s = self.rpc("snapshot", {"resumeIfLive": True})["resumedSession"]
+        self.assertEqual((s["elapsedSec"], s["paused"]), (60, True))
+
+    def test_free_session_with_long_pauses_resumes(self) -> None:
+        sid = self._start(0, 1200)
+        self.rpc("checkpoint-session", {"sessionId": sid, "focusSec": 600})  # 10 min paused in total
+        s = self.rpc("snapshot", {"resumeIfLive": True})["resumedSession"]
+        self.assertEqual((s["id"], s["elapsedSec"]), (sid, 600))
+        self.assertIsNone(self._row(sid)[0])
+
+    def test_dnd_never_takes_a_cookie_over_user_dnd(self) -> None:
+        import sys
+        sys.path.insert(0, str(REPO))
+        try:
+            from houra.app import Host
+        except ImportError:
+            self.skipTest("PySide6 missing")
+
+        class FakeNotif:
+            def __init__(self, inhibited):
+                self.inhibited, self.calls = inhibited, []
+
+            def property(self, name):
+                return self.inhibited
+
+            def call(self, method, *args):
+                self.calls.append(method)
+                return type("R", (), {"arguments": lambda _s: [7]})()
+
+        host = Host()
+        host._dnd_supported = True
+        host._notif = FakeNotif(inhibited=True)  # user's DND already on
+        self.assertFalse(host.setDoNotDisturb(True))
+        self.assertFalse(host.setDoNotDisturb(False))
+        self.assertEqual(host._notif.calls, [])
+        host._notif = FakeNotif(inhibited=False)
+        self.assertTrue(host.setDoNotDisturb(True))
+        self.assertFalse(host.setDoNotDisturb(False))
+        self.assertEqual(host._notif.calls, ["Inhibit", "UnInhibit"])
 
     def test_sqlite_schema_and_session_lifecycle(self) -> None:
         snap = self.rpc("snapshot")

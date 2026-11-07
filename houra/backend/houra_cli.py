@@ -296,6 +296,42 @@ def open_db(lang: str = "en") -> sqlite3.Connection:
     return conn
 
 
+LIVE_GAP_SEC = 180  # a session whose last checkpoint is older than this is abandoned
+
+
+def live_session_path() -> Path:
+    return state_dir() / "live_session.json"
+
+
+def save_live_state(session_id: int, paused: bool, at: float | None = None) -> None:
+    """Private (0600) sidecar: pause flag + last checkpoint time of the running session (no schema change)."""
+    data = {"id": int(session_id), "paused": bool(paused), "checkpointAt": float(at if at is not None else time.time())}
+    _write_private_file(live_session_path(), json.dumps(data))
+
+
+def load_live_state(session_id: int) -> dict[str, Any] | None:
+    try:
+        data = json.loads(live_session_path().read_text(encoding="utf-8"))
+        if int(data.get("id", 0)) == int(session_id):
+            return {"paused": bool(data.get("paused")), "checkpointAt": float(data.get("checkpointAt", 0))}
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    return None
+
+
+def session_liveness(row: Any, now_ts: float) -> tuple[bool, int, bool]:
+    """(still live, credited focus seconds, paused) for an open session row."""
+    wsec = int(row["work_min"]) * 60
+    fsec = max(0, int(row["focus_sec"]))
+    if wsec > 0:
+        fsec = min(fsec, wsec)
+    st = load_live_state(int(row["id"]))
+    # Legacy rows without a sidecar: the last checkpoint is at best start + focus_sec
+    last = st["checkpointAt"] if st else float(row["start"]) + fsec
+    live = 0 <= now_ts - last < LIVE_GAP_SEC and (wsec == 0 or fsec < wsec)
+    return live, fsec, bool(st and st["paused"])
+
+
 def close_abandoned(conn: sqlite3.Connection, active_session_id: int | None = None) -> int:
     now_ts = time.time()
     cutoff = now_ts - 3 * 86400
@@ -307,20 +343,13 @@ def close_abandoned(conn: sqlite3.Connection, active_session_id: int | None = No
     for r in rows:
         if active_session_id is not None and int(r["id"]) == int(active_session_id):
             continue
-        wmin = int(r["work_min"])
-        fsec = int(r["focus_sec"])
-        s_ts = float(r["start"])
-        # Do not prematurely close a session that is still within its live window
-        # (unless it was started in the past beyond its planned duration / free-mode heartbeat).
-        if wmin > 0 and 0 <= (now_ts - s_ts) < wmin * 60:
+        live, fsec, _paused = session_liveness(r, now_ts)
+        if live:
             continue
-        if wmin == 0 and 0 <= (now_ts - (s_ts + fsec)) < 180:
-            continue
-        planned = wmin * 60 if wmin > 0 else fsec
-        end_ts = s_ts + max(0, planned)
+        # Credit only checkpointed focus, never the planned length or wall-clock downtime
         conn.execute(
             "UPDATE sessions SET end = ?, focus_sec = ? WHERE id = ?",
-            (end_ts, max(0, planned), int(r["id"])),
+            (float(r["start"]) + fsec, fsec, int(r["id"])),
         )
         closed += 1
     if closed:
@@ -1681,15 +1710,10 @@ def build_snapshot(conn: sqlite3.Connection, params: dict[str, Any]) -> dict[str
             "FROM sessions WHERE end IS NULL ORDER BY id DESC LIMIT 1"
         ).fetchone()
         if cand is not None:
-            now_ts = time.time()
             c_start = float(cand["start"])
             c_wmin = int(cand["work_min"])
-            c_fsec = int(cand["focus_sec"])
-            elapsed = max(0, int(now_ts - c_start))
-            still_live = (
-                (c_wmin > 0 and 0 <= (now_ts - c_start) < c_wmin * 60)
-                or (c_wmin == 0 and 0 <= (now_ts - (c_start + c_fsec)) < 180)
-            )
+            # Resume from the checkpoint alone: time since it (app downtime, restart gap) is never credited
+            still_live, c_fsec, c_paused = session_liveness(cand, time.time())
             if still_live:
                 active_sid = int(cand["id"])
                 s_todos = _fetch_session_todos(conn, active_sid, td_link_meta, lang=lang)
@@ -1700,7 +1724,8 @@ def build_snapshot(conn: sqlite3.Connection, params: dict[str, Any]) -> dict[str
                     "workMin": c_wmin,
                     "restMin": int(cand["rest_min"]),
                     "start": c_start,
-                    "elapsedSec": elapsed if c_wmin > 0 else max(c_fsec, elapsed),
+                    "elapsedSec": c_fsec,
+                    "paused": c_paused,
                     "note": cand["note"] or "",
                     "todos": s_todos,
                 }
@@ -2553,11 +2578,8 @@ def handle_command(cmd: str, payload: dict[str, Any]) -> dict[str, Any]:
                     actual_sec = max(0, int(close_prev_sec))
                     end_ts = start_ts
                 else:
-                    # A stale row (shell crashed or was left open for days): trust its planned length or, in
-                    # free mode, its last checkpoint, never the wall-clock gap until this new session
-                    ow = int(orow["work_min"])
-                    raw_el = max(0, int(start_ts - float(orow["start"])))
-                    actual_sec = min(raw_el, ow * 60) if ow > 0 else min(raw_el, max(0, int(orow["focus_sec"])))
+                    # A stale row (app crashed or was left open for days): trust only its last checkpoint
+                    _live, actual_sec, _p = session_liveness(orow, start_ts)
                     end_ts = float(orow["start"]) + actual_sec
                 conn.execute(
                     "UPDATE sessions SET end = ?, focus_sec = ? WHERE id = ?",
@@ -2569,6 +2591,7 @@ def handle_command(cmd: str, payload: dict[str, Any]) -> dict[str, Any]:
                 (cid, goal, work_min, rest_min, start_ts),
             )
             sid = int(cur.lastrowid)
+            save_live_state(sid, False, max(start_ts, time.time()))
 
             attached_ids: list[int] = []
             for raw_tid in payload.get("todoIds") or []:
@@ -2702,6 +2725,7 @@ def handle_command(cmd: str, payload: dict[str, Any]) -> dict[str, Any]:
             fsec = max(0, int(payload.get("focusSec", 0)))
             conn.execute("UPDATE sessions SET focus_sec = ? WHERE id = ?", (fsec, sid))
             conn.commit()
+            save_live_state(sid, bool(payload.get("paused")))
             return {"ok": True, "sessionId": sid, "focusSec": fsec}
 
         if cmd == "finish-session":

@@ -36,11 +36,9 @@ Item {
   property int livePausedSeconds: 0
   property real _restEndMs: 0
   property int _lastNudgeBucket: 0
-  property int _lastCheckpointBucket: 0
 
   // --- Omarchy DND integration state ---
   property bool _managedDnd: false
-  property bool _priorDnd: false
 
   // --- Hydrated Backend Snapshot ---
   property var settings: ({
@@ -157,11 +155,15 @@ Item {
         svcRoot.livePausedSeconds = 0
         svcRoot._focusAnchorMs = Date.now()
         svcRoot._lastNudgeBucket = Math.floor(el / 3000)
-        svcRoot._lastCheckpointBucket = Math.floor(el / 60)
         svcRoot.breakNudgeActive = false
         svcRoot.breakOverlayVisible = false
-        svcRoot.phase = "focus"
-        svcRoot._applyFocusDndIfEnabled()
+        if (s.paused) {
+          svcRoot._pauseAnchorMs = Date.now()
+          svcRoot.phase = "paused"
+        } else {
+          svcRoot.phase = "focus"
+          svcRoot._applyFocusDndIfEnabled()
+        }
       }
     })
   }
@@ -179,14 +181,13 @@ Item {
     }
     if (_managedDnd) return
     if (!Host.dndSupported) return
-    _priorDnd = !!Host.doNotDisturb
-    _managedDnd = true
-    if (!_priorDnd) Host.setDoNotDisturb(true)
+    // Host inhibits only when DND is not already on, and reports whether it took its own cookie
+    _managedDnd = Host.setDoNotDisturb(true)
   }
 
   function _restoreDndIfManaged() {
     if (!_managedDnd) return
-    Host.setDoNotDisturb(_priorDnd)
+    Host.setDoNotDisturb(false) // release only Houra's cookie; the user's DND is never touched
     _managedDnd = false
   }
 
@@ -226,15 +227,70 @@ Item {
     var finishedJob = _currentRpc
     _currentRpc = null
     _rpcBusy = false
+    var cmd = finishedJob ? finishedJob.cmd : "?"
     if (parsed && parsed.ok) {
       _applySnapshot(parsed)
-      if (finishedJob && finishedJob.onDone) {
-        try { finishedJob.onDone(parsed) } catch (e2) {}
-      }
     } else {
       todoistSyncing = false
+      var err = parsed && parsed.error ? String(parsed.error) : "no result"
+      console.warn("houra: backend", cmd, "failed:", err)
+      lastError = cmd + ": " + err
+      backendError(cmd, err)
+      Host.setTrayStatus(_trayTitle, "Houra: " + lastError, phase)
+      lastErrorTimer.restart()
+    }
+    // Callbacks also run on failure; every one tolerates a result without its data fields
+    if (finishedJob && finishedJob.onDone) {
+      try { finishedJob.onDone(parsed || ({ ok: false })) } catch (e2) { console.warn("houra: callback for", cmd, "threw:", e2) }
     }
     _pumpRpc()
+  }
+
+  // Last backend failure, for any window to show; the tray tooltip shows it until the next tick/8 s
+  property string lastError: ""
+  signal backendError(string cmd, string message)
+  Timer {
+    id: lastErrorTimer
+    interval: 8000
+    onTriggered: {
+      svcRoot.lastError = ""
+      Host.setTrayStatus(svcRoot._trayTitle, svcRoot._trayTitle, svcRoot.phase)
+    }
+  }
+
+  function _checkpointPayload() {
+    var el = _accumFocusSec
+    if (phase === "focus") el += Math.max(0, Math.floor((Date.now() - _focusAnchorMs) / 1000))
+    return { sessionId: sessionId, focusSec: el, paused: phase === "paused" }
+  }
+
+  function checkpointNow() {
+    if (sessionId > 0 && (phase === "focus" || phase === "paused")) enqueueRpc("checkpoint-session", _checkpointPayload(), null)
+  }
+
+  // Called by the host on quit: hands back pending writes (queue, note debounce, final checkpoint)
+  // as [cmd, payload] pairs for it to run synchronously; their callbacks are dropped.
+  function drainForQuit() {
+    var jobs = []
+    for (var i = 0; i < _rpcQueue.length; i++) {
+      var j = _rpcQueue[i]
+      if (j.cmd !== "snapshot" && j.cmd !== "sync-todoist") jobs.push([j.cmd, j.payload])
+    }
+    _rpcQueue = []
+    if (sessionId > 0 && noteSaveTimer.running) {
+      noteSaveTimer.stop()
+      jobs.push(["set-session-note", { sessionId: sessionId, note: sessionNote }])
+    }
+    if (sessionId > 0 && (phase === "focus" || phase === "paused")) jobs.push(["checkpoint-session", _checkpointPayload()])
+    return jobs
+  }
+
+  // Checkpoint every 60 s in every rhythm, paused too, so liveness and recorded focus stay current
+  Timer {
+    interval: 60000
+    repeat: true
+    running: svcRoot.sessionId > 0 && (svcRoot.phase === "focus" || svcRoot.phase === "paused")
+    onTriggered: svcRoot.checkpointNow()
   }
 
   property int _rpcId: 0
@@ -305,18 +361,7 @@ Item {
             svcRoot.finishSession()
           }
         } else {
-          // Free mode: checkpoint to SQLite every 60s & nudge every 50m (3000s)
-          var cpBucket = Math.floor(svcRoot.elapsedSeconds / 60)
-          if (cpBucket > svcRoot._lastCheckpointBucket) {
-            svcRoot._lastCheckpointBucket = cpBucket
-            if (svcRoot.sessionId > 0) {
-              svcRoot.enqueueRpc("checkpoint-session", {
-                sessionId: svcRoot.sessionId,
-                focusSec: svcRoot.elapsedSeconds
-              }, null)
-            }
-          }
-
+          // Free mode: nudge every 50m (3000s)
           var nudgeBucket = Math.floor(svcRoot.elapsedSeconds / 3000)
           if (nudgeBucket > svcRoot._lastNudgeBucket) {
             svcRoot._lastNudgeBucket = nudgeBucket
@@ -621,7 +666,6 @@ Item {
         svcRoot.livePausedSeconds = 0
         svcRoot._focusAnchorMs = Date.now()
         svcRoot._lastNudgeBucket = 0
-        svcRoot._lastCheckpointBucket = 0
         svcRoot.breakNudgeActive = false
         svcRoot.breakOverlayVisible = false
         svcRoot.phase = "focus"
@@ -645,6 +689,7 @@ Item {
       _pauseAnchorMs = Date.now()
       phase = "paused"
       _restoreDndIfManaged()
+      checkpointNow()
     } else if (phase === "paused") {
       var pDelta = Math.max(0, Math.floor((Date.now() - _pauseAnchorMs) / 1000))
       _accumPausedSec += pDelta
@@ -652,6 +697,7 @@ Item {
       _focusAnchorMs = Date.now()
       phase = "focus"
       _applyFocusDndIfEnabled()
+      checkpointNow()
     }
   }
 

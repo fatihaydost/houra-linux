@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import sys
 from pathlib import Path
 
@@ -128,9 +129,10 @@ class Host(QObject):
 
     @Slot(bool, result=bool)
     def setDoNotDisturb(self, on: bool) -> bool:
+        """on: inhibit only if DND is not already on; returns whether Houra now holds its own cookie."""
         if not self._dnd_supported:
             return False
-        if on and not self._dnd_cookie:
+        if on and not self._dnd_cookie and not bool(self._notif.property("Inhibited")):
             reply = self._notif.call("Inhibit", APP_ID, "Houra focus session", {})
             args = reply.arguments()
             self._dnd_cookie = int(args[0]) if args else 0
@@ -138,7 +140,7 @@ class Host(QObject):
             self._notif.call("UnInhibit", self._dnd_cookie)
             self._dnd_cookie = 0
         self.dndChanged.emit()
-        return True
+        return bool(self._dnd_cookie)
 
     def _get_active_screen(self) -> str:
         win = QGuiApplication.focusWindow()
@@ -167,6 +169,21 @@ class Host(QObject):
     def setTrayStatus(self, title: str, tooltip: str, phase: str) -> None:
         if self.tray:
             self.tray.setToolTip(tooltip or title)
+
+
+def _flush_on_quit(host: Host, root: QObject) -> None:
+    """Run the QML side's pending writes and a final checkpoint synchronously before exit."""
+    host._pool.waitForDone(3000)
+    jobs = QMetaObject.invokeMethod(root, "drainForQuit", Qt.DirectConnection, Q_RETURN_ARG("QVariant"))
+    if hasattr(jobs, "toVariant"):
+        jobs = jobs.toVariant()
+    for cmd, payload in jobs or []:
+        try:
+            res = houra_cli.handle_command(str(cmd), json.loads(json.dumps(payload or {})))
+            if not res.get("ok"):
+                print(f"houra: quit flush {cmd} failed: {res.get('error')}", file=sys.stderr)
+        except Exception as exc:
+            print(f"houra: quit flush {cmd} failed: {exc}", file=sys.stderr)
 
 
 def _send_to_running(cmd: str, arg: str) -> str | None:
@@ -376,6 +393,12 @@ def main(argv: list[str] | None = None) -> int:
     tray.activated.connect(lambda reason: run("panel") if reason == QSystemTrayIcon.Trigger else None)
     host.tray = tray
     tray.show()
+
+    app.aboutToQuit.connect(lambda: _flush_on_quit(host, root))
+    signal.signal(signal.SIGTERM, lambda *_: app.quit())
+    sig_tick = QTimer(app)  # lets Python run its signal handler while Qt's loop blocks
+    sig_tick.timeout.connect(lambda: None)
+    sig_tick.start(500)
 
     if cmd:
         QTimer.singleShot(0, lambda: run(cmd, arg))
