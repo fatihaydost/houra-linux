@@ -3450,7 +3450,7 @@ def run_selftest() -> int:
         md_file = Path(td) / "weekly.md"
         md_file.write_text(
             "# 💻 Code\n"
-            "- [ ] Ship Omarchy plugin #code\n"
+            "- [ ] Ship Linux release #code\n"
             "- [w] Waiting on review → [[Reviewer]]\n"
             "- [x] Completed parent task\n"
             "  - [ ] Subtask under checkbox parent ✅ 2026-10-29\n"

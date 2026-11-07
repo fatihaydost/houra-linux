@@ -274,14 +274,14 @@ Item {
       // 1. SYSTEM INTEGRATION
       Rectangle {
         width: parent.width
-        height: omarchyCol.implicitHeight + 32
+        height: themeCol.implicitHeight + 32
         radius: 14
         color: root.tokens.card || "#17171c"
         border.width: 1
         border.color: root.tokens.line || Qt.rgba(1, 1, 1, 0.08)
 
         Column {
-          id: omarchyCol
+          id: themeCol
           anchors.left: parent.left
           anchors.right: parent.right
           anchors.top: parent.top

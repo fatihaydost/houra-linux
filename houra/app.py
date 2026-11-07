@@ -69,6 +69,9 @@ class Host(QObject):
         if self._notif.isValid():
             caps = self._notif.call("GetCapabilities").arguments()
             self._dnd_supported = bool(caps) and "inhibitions" in (caps[0] or [])
+        app = QGuiApplication.instance()
+        if app:  # activeScreenName follows the focused window
+            app.focusWindowChanged.connect(self.screenChanged)
 
     @Slot(str, "QVariant", result=int)
     def call(self, cmd: str, payload) -> int:
@@ -165,10 +168,10 @@ class Host(QObject):
         self._sound.setSource(QUrl.fromLocalFile(path))
         self._sound.play()
 
-    @Slot(str, str, str)
-    def setTrayStatus(self, title: str, tooltip: str, phase: str) -> None:
+    @Slot(str)
+    def setTrayStatus(self, tooltip: str) -> None:
         if self.tray:
-            self.tray.setToolTip(tooltip or title)
+            self.tray.setToolTip(tooltip)
 
 
 def _flush_on_quit(host: Host, root: QObject) -> None:

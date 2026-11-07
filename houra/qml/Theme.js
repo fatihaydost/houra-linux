@@ -285,7 +285,7 @@ function scopeShortLabel(scope, lang) {
   return t(lang, "Gün", "Day")
 }
 
-function resolveTokens(themeMode, omarchyBg, omarchyFg, omarchyAccent, omarchyUrgent) {
+function resolveTokens(themeMode, sysBg, sysFg, sysAccent, sysUrgent) {
   if (themeMode === "classic") {
     return {
       win: Qt.rgba(14 / 255, 14 / 255, 16 / 255, 1),
@@ -309,10 +309,10 @@ function resolveTokens(themeMode, omarchyBg, omarchyFg, omarchyAccent, omarchyUr
     }
   }
 
-  var bg = omarchyBg || Qt.rgba(16 / 255, 19 / 255, 21 / 255, 1)
-  var fg = omarchyFg || Qt.rgba(202 / 255, 204 / 255, 204 / 255, 1)
-  var acc = omarchyAccent || fg
-  var urg = omarchyUrgent || Qt.rgba(224 / 255, 100 / 255, 88 / 255, 1)
+  var bg = sysBg || Qt.rgba(16 / 255, 19 / 255, 21 / 255, 1)
+  var fg = sysFg || Qt.rgba(202 / 255, 204 / 255, 204 / 255, 1)
+  var acc = sysAccent || fg
+  var urg = sysUrgent || Qt.rgba(224 / 255, 100 / 255, 88 / 255, 1)
 
   var bgLum = 0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b
   var isLight = bgLum > 0.5

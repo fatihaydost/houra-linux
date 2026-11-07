@@ -10,8 +10,8 @@ import "../pages"
 // Native Wayland Window application panel (1120x740 max) matching Panel.swift:
 // Fixed min/max size hints (`minimumSize === maximumSize`) make tiling window managers
 // float and center the window without custom windowrules, while allowing the user's
-// native window manager close shortcut (e.g. SUPER+W / killactive) as well as Ctrl+W,
-// Ctrl+Q, Esc, the × button, and SUPER+ALT+H toggle to close it cleanly.
+// window manager's close shortcut as well as Ctrl+W, Ctrl+Q, Esc, the × button and
+// `houra toggle` to close it cleanly.
 Scope {
   id: root
 
@@ -22,7 +22,6 @@ Scope {
   property string focusZone: "page" // "page" | "sidebar"
   property bool sidebarOnCta: false
   property var openedScreen: null
-  property int openedWorkspaceId: -1
   property string openedMonitorName: ""
 
   readonly property var tabOrder: ["today", "stats", "sessions", "categories", "settings"]
@@ -88,33 +87,22 @@ Scope {
     return screens.length > 0 ? screens[0] : null
   }
 
-  // Workspaces are not portable across desktops; the window manager handles them
-  function _currentWorkspaceId() {
-    return -1
-  }
-
-  function isOnCurrentWorkspace() {
-    if (!open || !win.visible) return false
-    var curWs = _currentWorkspaceId()
-    if (curWs !== -1 && openedWorkspaceId !== -1 && curWs !== openedWorkspaceId) return false
-    return true
+  function isShown() {
+    return open && win.visible
   }
 
   function showTab(tabKey) {
     if (tabKey) currentTab = tabKey
     var nextScreen = _resolveFocusedScreen()
     var nextMonName = nextScreen && nextScreen.name ? String(nextScreen.name) : ""
-    var nextWsId = _currentWorkspaceId()
     var isFocusedNow = win.active
     var needRemap = win.visible && (
       !isFocusedNow
-      || (nextWsId !== -1 && openedWorkspaceId !== -1 && nextWsId !== openedWorkspaceId)
       || (nextMonName !== "" && openedMonitorName !== "" && nextMonName !== openedMonitorName)
     )
 
     if (nextScreen) openedScreen = nextScreen
     openedMonitorName = nextMonName
-    openedWorkspaceId = nextWsId
     sidebarOnCta = false
     focusZone = "page"
     open = true

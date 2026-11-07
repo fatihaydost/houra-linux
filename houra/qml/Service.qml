@@ -26,7 +26,6 @@ Item {
   property var sessionTodos: []
   property bool breakOverlayVisible: false
   property bool breakNudgeActive: false
-  property bool nativeDialogOpen: false
   readonly property bool newSessionOpen: newSessionWin.open
 
   property real _focusAnchorMs: 0
@@ -37,7 +36,7 @@ Item {
   property real _restEndMs: 0
   property int _lastNudgeBucket: 0
 
-  // --- Omarchy DND integration state ---
+  // --- Do Not Disturb integration state ---
   property bool _managedDnd: false
 
   // --- Hydrated Backend Snapshot ---
@@ -84,7 +83,7 @@ Item {
   property int historyTopicId: 0
   property string historyDayFilter: ""
 
-  // Live theme tokens reactive to Omarchy's active theme OR Houra Classic mode
+  // Live theme tokens from the system palette OR Houra Classic mode
   readonly property var tokens: Theme.resolveTokens(
     settings && settings.themeMode ? String(settings.themeMode) : "system",
     Commons.Color.background,
@@ -236,7 +235,6 @@ Item {
       console.warn("houra: backend", cmd, "failed:", err)
       lastError = cmd + ": " + err
       backendError(cmd, err)
-      Host.setTrayStatus(_trayTitle, "Houra: " + lastError, phase)
       lastErrorTimer.restart()
     }
     // Callbacks also run on failure; every one tolerates a result without its data fields
@@ -252,10 +250,7 @@ Item {
   Timer {
     id: lastErrorTimer
     interval: 8000
-    onTriggered: {
-      svcRoot.lastError = ""
-      Host.setTrayStatus(svcRoot._trayTitle, svcRoot._trayTitle, svcRoot.phase)
-    }
+    onTriggered: svcRoot.lastError = ""
   }
 
   function _checkpointPayload() {
@@ -602,16 +597,12 @@ Item {
   }
 
   function toggleMainPanel() {
-    if (mainPanelWin.open && mainPanelWin.isOnCurrentWorkspace()) {
+    if (mainPanelWin.isShown()) {
       mainPanelWin.hideWindow()
     } else {
       refreshSnapshot()
       mainPanelWin.showTab("")
     }
-  }
-
-  function _focusedScreenName() {
-    return Host.activeScreenName
   }
 
   function startNewSession(catId, goal, workMin, restMin, todoIds, extraTasks, rhythmMode, customWork, customRest) {
@@ -1084,7 +1075,7 @@ Item {
   function ipc(name, arg) {
     switch (String(name)) {
     case "newSession":
-      if (newSessionWin.open && newSessionWin.isOnCurrentWorkspace()) newSessionWin.closeModal()
+      if (newSessionWin.isShown()) newSessionWin.closeModal()
       else svcRoot.openNewSession(0, "")
       return "ok"
     case "panel":
@@ -1137,10 +1128,10 @@ Item {
     return "unknown command: " + name
   }
 
-  // Tray title/tooltip follow the timer
-  readonly property string _trayTitle: phase === "idle" ? "Houra" : ("Houra " + clockText)
-  on_TrayTitleChanged: Host.setTrayStatus(_trayTitle, phase === "idle" ? "Houra" : (activeCategory.name + (sessionGoal ? " · " + sessionGoal : "") + " · " + clockText), phase)
-  onPhaseChanged: Host.setTrayStatus(_trayTitle, _trayTitle, phase)
+  // Tray tooltip follows the timer; a backend failure shows until lastErrorTimer clears it
+  readonly property string _trayTooltip: lastError !== "" ? ("Houra: " + lastError)
+    : (phase === "idle" ? "Houra" : (activeCategory.name + (sessionGoal ? " · " + sessionGoal : "") + " · " + clockText))
+  on_TrayTooltipChanged: Host.setTrayStatus(_trayTooltip)
 
   // --- Windows ---
 

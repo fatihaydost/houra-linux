@@ -5,10 +5,10 @@ import "../components"
 
 // Native Wayland Window modal for starting a new focus session (NewSession.swift parity + custom rhythm):
 // - Fixed min/max size hints (`minimumSize === maximumSize`) make tiling window managers float & center it
-//   and natively close it on the user's window manager close shortcut (e.g. SUPER+W / killactive).
+//   and lets the window manager's close shortcut close it.
 // - Horizontal category pills, large underline goal input, Today / Todoist / This week task tabs,
 //   inline New task creator, Rhythm selector (25+5, 50+10, Custom, Free).
-// - SUPER+W, Ctrl+W, Ctrl+Q, Esc, or × cancels; Enter starts.
+// - The window manager's close shortcut, Ctrl+W, Ctrl+Q, Esc, or × cancels; Enter starts.
 Scope {
   id: root
 
@@ -166,7 +166,6 @@ Scope {
   }
 
   property var openedScreen: null
-  property int openedWorkspaceId: -1
   property string openedMonitorName: ""
 
   readonly property string windowTitle: "Houra — " + Theme.t(lang, "Yeni oturum", "New session")
@@ -183,16 +182,8 @@ Scope {
     return screens.length > 0 ? screens[0] : null
   }
 
-  // Workspaces are not portable across desktops; the window manager handles them
-  function _currentWorkspaceId() {
-    return -1
-  }
-
-  function isOnCurrentWorkspace() {
-    if (!open || !win.visible) return false
-    var curWs = _currentWorkspaceId()
-    if (curWs !== -1 && openedWorkspaceId !== -1 && curWs !== openedWorkspaceId) return false
-    return true
+  function isShown() {
+    return open && win.visible
   }
 
   function _clampWork(v) {
@@ -349,16 +340,13 @@ Scope {
     passive = !!passiveOpen
     var nextScreen = _resolveFocusedScreen()
     var nextMonName = nextScreen && nextScreen.name ? String(nextScreen.name) : ""
-    var nextWsId = _currentWorkspaceId()
     var isFocusedNow = win.active
     var needRemap = win.visible && (
       !isFocusedNow
-      || (nextWsId !== -1 && openedWorkspaceId !== -1 && nextWsId !== openedWorkspaceId)
       || (nextMonName !== "" && openedMonitorName !== "" && nextMonName !== openedMonitorName)
     )
     if (nextScreen) openedScreen = nextScreen
     openedMonitorName = nextMonName
-    openedWorkspaceId = nextWsId
 
     var cats = service ? service.categories : []
     var defCat = prefillCatId && prefillCatId > 0
