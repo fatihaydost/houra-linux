@@ -90,6 +90,7 @@ Item {
   }
 
   function dismissOverlay() {
+    if (confirmDisconnect) { confirmDisconnect = false; return true }
     return false
   }
 
@@ -115,59 +116,96 @@ Item {
     return false
   }
 
-  function _focusStops() {
-    var stops = ["scroll"]
-    if (settings.weeklyOn) stops.push("weeklyInput")
-    if (settings.todoistOn) {
-      if (!todoist.hasToken) stops.push("tdTokenInput")
-      stops.push("todoistFilterInput")
-    }
-    stops.push("dbPathInput")
-    return stops
+  // Keyboard stops: every MouseArea tagged objectName "kb"/"kbSeg" plus text inputs tagged
+  // "kbText", collected in tree (= visual) order; hidden ones drop out on their own.
+  property Item kbItem: null
+  property bool confirmDisconnect: false
+  onConfirmDisconnectChanged: if (confirmDisconnect) disconnectDisarm.restart()
+  onKbPageActiveChanged: if (!kbPageActive) { kbItem = null; confirmDisconnect = false }
+
+  Timer { id: disconnectDisarm; interval: 3500; onTriggered: root.confirmDisconnect = false }
+
+  function _collect(item, out) {
+    if (!item || !item.visible) return
+    var tag = item.objectName
+    if ((tag === "kb" || tag === "kbSeg" || tag === "kbText") && item.width > 0 && (tag === "kbText" || item.enabled)) out.push(item)
+    for (var i = 0; i < item.children.length; i++) _collect(item.children[i], out)
   }
 
-  function _applyStop(stop) {
-    if (stop === "weeklyInput") {
-      ensureItemVisible(weeklyInput)
-      weeklyInput.forceActiveFocus()
-    } else if (stop === "tdTokenInput") {
-      ensureItemVisible(tdTokenInput)
-      tdTokenInput.forceActiveFocus()
-    } else if (stop === "todoistFilterInput") {
-      ensureItemVisible(todoistFilterInput)
-      todoistFilterInput.forceActiveFocus()
-    } else if (stop === "dbPathInput") {
-      ensureItemVisible(dbPathInput)
-      dbPathInput.forceActiveFocus()
-    } else {
-      releaseTextFocus()
-    }
+  function _focusStops() {
+    var out = []
+    _collect(pageCol, out)
+    return out
+  }
+
+  function _applyStop(item) {
+    kbItem = item
+    if (!item) { releaseTextFocus(); return }
+    ensureItemVisible(item.objectName === "kbText" ? item.parent : item)
+    if (item.objectName === "kbText") item.forceActiveFocus()
+    else releaseTextFocus()
+    _placeRing()
+  }
+
+  function _current(stops) {
+    for (var i = 0; i < stops.length; i++) if (stops[i].objectName === "kbText" && stops[i].activeFocus) return i
+    return stops.indexOf(kbItem)
   }
 
   function enterFromTab(delta) {
     var stops = _focusStops()
-    _applyStop(delta >= 0 ? stops[0] : stops[stops.length - 1])
+    if (stops.length) _applyStop(delta >= 0 ? stops[0] : stops[stops.length - 1])
   }
 
   function stepFocus(delta) {
     var stops = _focusStops()
-    var cur = "scroll"
-    if (weeklyInput.activeFocus) cur = "weeklyInput"
-    else if (tdTokenInput.activeFocus) cur = "tdTokenInput"
-    else if (todoistFilterInput.activeFocus) cur = "todoistFilterInput"
-    else if (dbPathInput.activeFocus) cur = "dbPathInput"
-    var idx = stops.indexOf(cur)
+    var idx = _current(stops)
     if (idx < 0) idx = (delta >= 0 ? -1 : stops.length)
     var next = idx + delta
-    if (next < 0 || next >= stops.length) return false
+    if (next < 0 || next >= stops.length) { kbItem = null; return false }
     _applyStop(stops[next])
     return true
+  }
+
+  function _activate(item) {
+    item.clicked(null)
+    Qt.callLater(_placeRing)
+  }
+
+  // Segmented choice: Left/Right picks the neighbouring segment in the same row.
+  function _stepSegment(delta) {
+    var row = kbItem.parent.parent
+    var segs = _focusStops().filter(function(s) { return s.objectName === "kbSeg" && s.parent.parent === row })
+    var i = segs.indexOf(kbItem) + delta
+    if (i < 0 || i >= segs.length) return true
+    _applyStop(segs[i])
+    _activate(segs[i])
+    return true
+  }
+
+  function _placeRing() {
+    var it = kbItem
+    if (!it || it.objectName === "kbText" || !it.visible) return
+    var pt = it.mapToItem(settingsFlick.contentItem, 0, 0)
+    kbRing.x = pt.x - 3
+    kbRing.y = pt.y - 3
+    kbRing.width = it.width + 6
+    kbRing.height = it.height + 6
+    kbRing.radius = Math.min(it.height / 2, 9) + 3
   }
 
   function handleKey(event) {
     if (isEditingText) return false
     var k = event.key
+    var onButton = kbItem && kbItem.objectName !== "kbText" && kbItem.visible
 
+    if (onButton && (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space)) {
+      _activate(kbItem)
+      return true
+    }
+    if (onButton && kbItem.objectName === "kbSeg" && (k === Qt.Key_Left || k === Qt.Key_Right)) {
+      return _stepSegment(k === Qt.Key_Left ? -1 : 1)
+    }
     if (k === Qt.Key_Left) {
       return "sidebar"
     }
@@ -187,6 +225,19 @@ Item {
     contentHeight: pageCol.implicitHeight + 52
     clip: true
     boundsBehavior: Flickable.StopAtBounds
+    onContentHeightChanged: Qt.callLater(root._placeRing)
+    onWidthChanged: Qt.callLater(root._placeRing)
+
+    // Focus ring drawn outside the control so it stays visible on filled accent buttons.
+    Rectangle {
+      id: kbRing
+      objectName: "kbRing"
+      z: 10
+      visible: root.kbPageActive && root.kbItem !== null && root.kbItem.visible && root.kbItem.objectName !== "kbText" && !root.isEditingText
+      color: "transparent"
+      border.width: 2
+      border.color: root.tokens.accent || Qt.rgba(1, 1, 1, 0.55)
+    }
 
     Column {
       id: pageCol
@@ -315,6 +366,7 @@ Item {
                   }
 
                   MouseArea {
+                    objectName: "kbSeg"
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: if (root.service) root.service.patchSettings({ themeMode: modelData.key })
@@ -385,6 +437,7 @@ Item {
               }
 
               MouseArea {
+                objectName: "kb"
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 onClicked: if (root.service) root.service.patchSettings({ focusDnd: !root.settings.focusDnd })
@@ -448,6 +501,7 @@ Item {
               }
 
               MouseArea {
+                objectName: "kb"
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 onClicked: Host.setAutostart(!Host.autostartEnabled)
@@ -520,6 +574,7 @@ Item {
                   }
 
                   MouseArea {
+                    objectName: "kbSeg"
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: if (root.service) root.service.patchSettings({ language: modelData.key })
@@ -577,6 +632,7 @@ Item {
                   }
 
                   MouseArea {
+                    objectName: "kbSeg"
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: if (root.service) root.service.setWidgetStyle(modelData.key)
@@ -641,6 +697,7 @@ Item {
               }
 
               MouseArea {
+                objectName: "kb"
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 onClicked: if (root.service) root.service.patchSettings({ weeklyOn: !root.settings.weeklyOn, weeklyTemplate: weeklyInput.text.trim() })
@@ -686,6 +743,7 @@ Item {
 
             TextInput {
               id: weeklyInput
+              objectName: "kbText"
               anchors.fill: parent
               anchors.leftMargin: 10
               anchors.rightMargin: 10
@@ -727,6 +785,7 @@ Item {
               }
 
               MouseArea {
+                objectName: "kb"
                 id: chooseFolderHov
                 anchors.fill: parent
                 hoverEnabled: true
@@ -754,6 +813,7 @@ Item {
               }
 
               MouseArea {
+                objectName: "kb"
                 id: chooseFileHov
                 anchors.fill: parent
                 hoverEnabled: true
@@ -781,6 +841,7 @@ Item {
               }
 
               MouseArea {
+                objectName: "kb"
                 id: saveWkHov
                 anchors.fill: parent
                 hoverEnabled: true
@@ -908,6 +969,7 @@ Item {
               }
 
               MouseArea {
+                objectName: "kb"
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
@@ -971,6 +1033,7 @@ Item {
               }
 
               MouseArea {
+                objectName: "kb"
                 id: openTdWebArea
                 anchors.fill: parent
                 hoverEnabled: true
@@ -1014,6 +1077,7 @@ Item {
 
               TextInput {
                 id: tdTokenInput
+                objectName: "kbText"
                 anchors.left: parent.left
                 anchors.leftMargin: 10
                 anchors.right: tdInlineBtns.left
@@ -1057,6 +1121,7 @@ Item {
                   }
 
                   MouseArea {
+                    objectName: "kb"
                     id: showTdKeyArea
                     anchors.fill: parent
                     hoverEnabled: true
@@ -1085,6 +1150,7 @@ Item {
                   }
 
                   MouseArea {
+                    objectName: "kb"
                     id: pasteTdKeyArea
                     anchors.fill: parent
                     hoverEnabled: true
@@ -1125,6 +1191,7 @@ Item {
               }
 
               MouseArea {
+                objectName: "kb"
                 id: saveTdArea
                 anchors.fill: parent
                 hoverEnabled: true
@@ -1139,11 +1206,11 @@ Item {
               width: disconnectTdLbl.implicitWidth + 18
               height: 34
               radius: 8
-              color: disconnectTdArea.containsMouse
+              color: (disconnectTdArea.containsMouse || root.confirmDisconnect)
                 ? Theme.withAlpha(root.tokens.danger || "#e06458", 0.18)
                 : (root.tokens.card2 || "#1f1f25")
               border.width: 1
-              border.color: disconnectTdArea.containsMouse
+              border.color: (disconnectTdArea.containsMouse || root.confirmDisconnect)
                 ? (root.tokens.danger || "#e06458")
                 : (root.tokens.line || Qt.rgba(1, 1, 1, 0.1))
 
@@ -1151,20 +1218,27 @@ Item {
                 textFormat: Text.PlainText
                 id: disconnectTdLbl
                 anchors.centerIn: parent
-                text: Theme.t(root.lang, "Bağlantıyı kes", "Disconnect")
+                text: root.confirmDisconnect
+                  ? Theme.t(root.lang, "Bağlantı kesilsin mi?", "Disconnect?")
+                  : Theme.t(root.lang, "Bağlantıyı kes", "Disconnect")
                 font.family: root.fontFamily
                 font.pixelSize: 11
-                color: disconnectTdArea.containsMouse
+                color: (disconnectTdArea.containsMouse || root.confirmDisconnect)
                   ? (root.tokens.danger || "#e06458")
                   : (root.tokens.secondary || "#cccccc")
               }
 
               MouseArea {
+                objectName: "kb"
                 id: disconnectTdArea
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: if (root.service) root.service.clearTodoistToken()
+                onClicked: {
+                  if (!root.confirmDisconnect) { root.confirmDisconnect = true; return }
+                  root.confirmDisconnect = false
+                  if (root.service) root.service.clearTodoistToken()
+                }
               }
             }
           }
@@ -1223,6 +1297,7 @@ Item {
                     }
 
                     MouseArea {
+                      objectName: "kbSeg"
                       anchors.fill: parent
                       cursorShape: Qt.PointingHandCursor
                       onClicked: {
@@ -1263,6 +1338,7 @@ Item {
 
                 TextInput {
                   id: todoistFilterInput
+                  objectName: "kbText"
                   anchors.fill: parent
                   anchors.leftMargin: 10
                   anchors.rightMargin: 10
@@ -1301,6 +1377,7 @@ Item {
                 }
 
                 MouseArea {
+                  objectName: "kb"
                   id: syncTdArea
                   anchors.fill: parent
                   hoverEnabled: true
@@ -1319,8 +1396,8 @@ Item {
             wrapMode: Text.WordWrap
             text: Theme.t(
               root.lang,
-              "Odak oturumunun bitmesi veya kapatılması Todoist görevini otomatik kapatmaz. Görevi Todoist'te tamamlamak için oturum kartındaki / bar menüsündeki 'Todoist'te tamamla' düğmesini veya Todoist kartındaki ○ işaretini kullanabilirsin.",
-              "Finishing or closing a focus session never auto-completes Todoist tasks. Use the explicit 'Complete in Todoist' button on the session card / bar menu or the ○ checkbox in the Todoist card."
+              "Odak oturumunun bitmesi veya kapatılması Todoist görevini otomatik kapatmaz. Görevi Todoist'te tamamlamak için oturum kartındaki 'Todoist'te tamamla' düğmesini veya Todoist kartındaki ○ işaretini kullanabilirsin.",
+              "Finishing or closing a focus session never auto-completes Todoist tasks. Use the explicit 'Complete in Todoist' button on the session card or the ○ checkbox in the Todoist card."
             )
             font.family: root.fontFamily
             font.pixelSize: 11
@@ -1383,6 +1460,7 @@ Item {
 
             TextInput {
               id: dbPathInput
+              objectName: "kbText"
               anchors.fill: parent
               anchors.leftMargin: 10
               anchors.rightMargin: 10
@@ -1418,6 +1496,7 @@ Item {
               }
 
               MouseArea {
+                objectName: "kb"
                 id: openDirHov
                 anchors.fill: parent
                 hoverEnabled: true
@@ -1445,6 +1524,7 @@ Item {
               }
 
               MouseArea {
+                objectName: "kb"
                 id: expHov
                 anchors.fill: parent
                 hoverEnabled: true

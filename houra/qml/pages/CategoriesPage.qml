@@ -22,6 +22,18 @@ Item {
   readonly property var categories: service ? service.categories : []
   readonly property bool isEditingText: (activeNameInput !== null && activeNameInput.activeFocus) || symbolPicker.isEditingText
   property int confirmDeleteId: 0
+  onConfirmDeleteIdChanged: if (confirmDeleteId !== 0) disarmTimer.restart()
+
+  Timer { id: disarmTimer; interval: 3500; onTriggered: root.confirmDeleteId = 0 }
+
+  // Confirm text carries the cost: "23 oturum · 16 sa — silinsin mi?"
+  function deleteConfirmText(cat) {
+    var n = Number(cat.sessionCount || 0)
+    var ask = Theme.t(lang, "Silinsin mi?", "Delete?")
+    if (n <= 0) return ask
+    return n + " " + Theme.t(lang, "oturum", n === 1 ? "session" : "sessions") + " · " +
+      Theme.formatMinutes(cat.totalMinutes || 0, lang) + " — " + Theme.t(lang, "silinsin mi?", "delete?")
+  }
 
   onCategoriesChanged: {
     if (categories.length === 0) kbIndex = 0
@@ -400,6 +412,7 @@ Item {
 
                 Text {
                   textFormat: Text.PlainText
+                  visible: !catRowCard.confirming
                   anchors.verticalCenter: parent.verticalCenter
                   text: (cat.sessionCount || 0) + " " + Theme.t(root.lang, "oturum", "sessions") +
                         " · " + Theme.formatMinutes(cat.totalMinutes || 0, root.lang)
@@ -423,7 +436,7 @@ Item {
                     id: delLbl
                     anchors.centerIn: parent
                     text: catRowCard.confirming
-                      ? Theme.t(root.lang, "Sil?", "Delete?")
+                      ? root.deleteConfirmText(cat)
                       : "×"
                     font.family: root.fontFamily
                     font.pixelSize: catRowCard.confirming ? 11 : 16
