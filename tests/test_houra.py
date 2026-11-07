@@ -961,7 +961,7 @@ class HouraTests(unittest.TestCase):
             self.assertIn("X-GNOME-Autostart-enabled=true", body)
             with mock.patch("shutil.which", return_value="/usr/bin/houra"):
                 autostart.set_enabled(True)
-            self.assertIn("\nExec=houra\n", path.read_text(encoding="utf-8"))
+            self.assertIn("\nExec=/usr/bin/houra\n", path.read_text(encoding="utf-8"))
             self.assertFalse(autostart.set_enabled(False))
             self.assertFalse(path.exists())
             env = dict(os.environ, XDG_CONFIG_HOME=td)
