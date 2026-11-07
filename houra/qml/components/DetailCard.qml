@@ -847,8 +847,8 @@ Item {
             anchors.baseline: parent.bottom
             text: {
               var td = root.service && root.service.todayData ? root.service.todayData : null
-              var sc = (td ? (td.sessionsCount || 0) : 0) + 1
-              return sc + " " + Theme.t(root.lang, "oturum", sc === 1 ? "session" : "sessions")
+              // completed sessions today, same count as the tray header and Today page
+              return Theme.countLabel(td ? td.sessionsCount : 0, root.lang, "oturum", "session", "sessions")
             }
             font.family: root.fontFamily
             font.pixelSize: 12

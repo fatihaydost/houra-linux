@@ -687,8 +687,8 @@ Item {
 
             Text {
               textFormat: Text.PlainText
-              text: (root.stats.sessionsCount || 0) + " " + Theme.t(root.lang, "oturum", "sessions") +
-                    " · " + (root.stats.activeDays || 0) + " " + Theme.t(root.lang, "aktif gün", "active days")
+              text: Theme.countLabel(root.stats.sessionsCount, root.lang, "oturum", "session", "sessions") +
+                    " · " + Theme.countLabel(root.stats.activeDays, root.lang, "aktif gün", "active day", "active days")
               font.family: root.fontFamily
               font.pixelSize: 10
               color: root.tokens.secondary || "#aaaaaa"

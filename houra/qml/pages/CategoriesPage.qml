@@ -414,7 +414,7 @@ Item {
                   textFormat: Text.PlainText
                   visible: !catRowCard.confirming
                   anchors.verticalCenter: parent.verticalCenter
-                  text: (cat.sessionCount || 0) + " " + Theme.t(root.lang, "oturum", "sessions") +
+                  text: Theme.countLabel(cat.sessionCount, root.lang, "oturum", "session", "sessions") +
                         " · " + Theme.formatMinutes(cat.totalMinutes || 0, root.lang)
                   font.family: root.fontFamily
                   font.pixelSize: 12

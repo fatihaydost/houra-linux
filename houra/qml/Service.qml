@@ -1012,7 +1012,7 @@ Item {
     var td = todayData || {}
     items.push({ key: "", enabled: false,
       label: Theme.t(L, "Bugün ", "Today ") + Theme.formatMinutes(td.focusMinutes || 0, L) + Theme.t(L, " odak", " focused")
-        + " · " + (td.sessionsCount || 0) + " " + Theme.t(L, "oturum", "sessions") })
+        + " · " + Theme.countLabel(td.sessionsCount, L, "oturum", "session", "sessions") })
     sep()
     if (phase === "idle") {
       items.push({ key: "start", label: Theme.t(L, "Oturum başlat…", "Start session…") })

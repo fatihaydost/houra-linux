@@ -855,7 +855,7 @@ Item {
             textFormat: Text.PlainText
             visible: !!root.settings.weeklyOn && String(root.settings.weeklyTemplate || "").trim().length > 0
             text: root.weekly.exists
-              ? (Theme.t(root.lang, "Bu hafta: ", "This week: ") + root.weekly.fileName + " · " + root.weekly.openCount + " " + Theme.t(root.lang, "açık görev", "open tasks"))
+              ? (Theme.t(root.lang, "Bu hafta: ", "This week: ") + root.weekly.fileName + " · " + Theme.countLabel(root.weekly.openCount, root.lang, "açık görev", "open task", "open tasks"))
               : Theme.t(root.lang, "Bu hafta için eşleşen Markdown dosyası bulunamadı.", "No matching weekly Markdown file found.")
             font.family: root.fontFamily
             font.pixelSize: 11
@@ -1413,7 +1413,7 @@ Item {
               ? String(root.todoist.error)
               : ((root.service && root.service.todoistSyncing)
                 ? Theme.t(root.lang, "Todoist ile eşitleniyor…", "Syncing with Todoist…")
-                : (Theme.t(root.lang, "Eşitlendi · ", "Synced · ") + (root.todoist.openCount || 0) + " " + Theme.t(root.lang, "açık görev", "open tasks")))
+                : (Theme.t(root.lang, "Eşitlendi · ", "Synced · ") + Theme.countLabel(root.todoist.openCount, root.lang, "açık görev", "open task", "open tasks")))
             font.family: root.fontFamily
             font.pixelSize: 11
             color: (root.todoist.error || "") !== ""

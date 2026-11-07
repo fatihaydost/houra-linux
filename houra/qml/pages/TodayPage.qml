@@ -667,12 +667,12 @@ Item {
             {
               title: Theme.t(root.lang, "Oturumlar", "Sessions"),
               value: String(root.today.sessionsCount || 0),
-              sub: (root.today.pomodoro50Count || 0) + " × 50+10"
+              sub: root.today.rhythmSummary || "—"
             },
             {
               title: Theme.t(root.lang, "Molalar", "Breaks"),
               value: Theme.formatMinutes(root.today.breakMinutes || 0, root.lang),
-              sub: (root.today.breaksCount || 0) + " " + Theme.t(root.lang, "mola", "breaks")
+              sub: Theme.countLabel(root.today.breaksCount, root.lang, "mola", "break", "breaks")
             },
             {
               title: Theme.t(root.lang, "Görevler", "Tasks"),
@@ -720,6 +720,8 @@ Item {
               Text {
                 textFormat: Text.PlainText
                 text: modelData.sub
+                width: parent.width
+                elide: Text.ElideRight
                 font.family: root.fontFamily
                 font.pixelSize: 10
                 color: root.tokens.secondary || "#aaaaaa"

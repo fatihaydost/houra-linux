@@ -105,6 +105,11 @@ function formatMinutes(totalMins, lang) {
   return h + " " + t(lang, "sa", "h") + " " + remPad + " " + t(lang, "dk", "min")
 }
 
+function countLabel(n, lang, trWord, enOne, enMany) {
+  var k = Number(n) || 0
+  return k + " " + t(lang, trWord, k === 1 ? enOne : enMany)
+}
+
 function formatRhythm(workMin, restMin, lang) {
   var w = Number(workMin) || 0
   var r = Number(restMin) || 0

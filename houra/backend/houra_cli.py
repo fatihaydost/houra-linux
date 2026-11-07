@@ -1984,7 +1984,7 @@ def build_snapshot(conn: sqlite3.Connection, params: dict[str, Any]) -> dict[str
     today_focus_mins = 0
     today_focus_sec = 0
     today_completed_cnt = 0
-    today_50_cnt = 0
+    today_rhythms: dict[str, int] = {}
     today_breaks_cnt = 0
     today_break_mins = 0
     today_emergency_cnt = 0
@@ -2000,8 +2000,8 @@ def build_snapshot(conn: sqlite3.Connection, params: dict[str, Any]) -> dict[str
             today_focus_sec += fsec
             today_focus_mins += fsec // 60
             today_completed_cnt += 1
-            if wmin_row == 50:
-                today_50_cnt += 1
+            rl = _rhythm_label(wmin_row, rmin_row, lang)
+            today_rhythms[rl] = today_rhythms.get(rl, 0) + 1
             if int(r["emergency"]) != 0:
                 today_emergency_cnt += 1
             else:
@@ -2206,7 +2206,7 @@ def build_snapshot(conn: sqlite3.Connection, params: dict[str, Any]) -> dict[str
             "focusSec": today_focus_sec,
             "focusMinutes": today_focus_mins,
             "sessionsCount": today_completed_cnt,
-            "pomodoro50Count": today_50_cnt,
+            "rhythmSummary": " · ".join(f"{n} × {k}" for k, n in sorted(today_rhythms.items(), key=lambda kv: -kv[1])),
             "breaksCount": today_breaks_cnt,
             "breakMinutes": today_break_mins,
             "emergencyCount": today_emergency_cnt,
@@ -2405,9 +2405,7 @@ def _compute_stats(
     else:
         delta_pct = None
 
-    today_iso = dt.date.today()
-    elapsed_days = min(span_days, max(1, (min(range_end, today_iso) - range_start).days + 1)) if range_start <= today_iso else span_days
-    daily_avg = int(round(total_minutes / max(1, elapsed_days)))
+    daily_avg = int(round(total_minutes / max(1, active_days)))  # matches the "N active days" label
 
     # Unfiltered category breakdown across ALL categories (matching Stats.swift:211-241)
     cat_ids_seen = {int(c["id"]) for c in categories}
@@ -3503,6 +3501,7 @@ def run_selftest() -> int:
         finished = handle_command("finish-session", {"sessionId": sid, "focusSec": 2400})
         assert finished["today"]["focusMinutes"] == 40
         assert finished["today"]["breakMinutes"] == 8
+        assert finished["today"]["sessionsCount"] == 1 and finished["today"]["rhythmSummary"] == "1 × 40 + 8"
 
         csv_out = handle_command("export-csv", {"path": os.path.join(td, "out.csv")})
         assert csv_out["ok"] and csv_out["count"] == 1 and Path(csv_out["csvPath"]).is_file()
