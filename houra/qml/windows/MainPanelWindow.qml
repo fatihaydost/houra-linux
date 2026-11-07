@@ -390,8 +390,8 @@ Scope {
                   model: [
                     { key: "today", icon: "clock", label: Theme.t(root.lang, "Bugün", "Today") },
                     { key: "stats", icon: "chart-bar", label: Theme.t(root.lang, "İstatistikler", "Statistics") },
-                    { key: "sessions", icon: "list-bullets", label: Theme.t(root.lang, "Oturumlar", "Sessions") },
-                    { key: "categories", icon: "squares-four", label: Theme.t(root.lang, "Kategoriler", "Categories") }
+                    { key: "sessions", icon: "calendar", label: Theme.t(root.lang, "Oturumlar", "Sessions") },
+                    { key: "categories", icon: "folder", label: Theme.t(root.lang, "Kategoriler", "Categories") }
                   ]
                   delegate: Rectangle {
                     id: navPill
