@@ -16,6 +16,7 @@ from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
+from . import autostart
 from .backend import houra_cli
 
 APP_ID = "io.github.fatihaydost.Houra"
@@ -107,6 +108,23 @@ class Host(QObject):
         return bool(v)
 
     doNotDisturb = Property(bool, _get_dnd, notify=dndChanged)
+
+    autostartChanged = Signal()
+
+    def _get_autostart(self) -> bool:
+        return autostart.is_enabled()
+
+    autostartEnabled = Property(bool, _get_autostart, notify=autostartChanged)
+
+    @Slot(bool, result=bool)
+    def setAutostart(self, on: bool) -> bool:
+        try:
+            state = autostart.set_enabled(on)
+        except OSError as e:
+            print(f"houra: autostart: {e}", file=sys.stderr)
+            state = autostart.is_enabled()
+        self.autostartChanged.emit()
+        return state
 
     @Slot(bool, result=bool)
     def setDoNotDisturb(self, on: bool) -> bool:
@@ -243,6 +261,14 @@ def main(argv: list[str] | None = None) -> int:
         return _smoke()
     if args and args[0] == "--selftest":
         return houra_cli.run_selftest()
+    if args and args[0] == "--login":
+        if len(args) > 1 and args[1] in ("on", "off"):
+            autostart.set_enabled(args[1] == "on")
+        elif len(args) > 1:
+            print("usage: houra --login [on|off]", file=sys.stderr)
+            return 2
+        print("on" if autostart.is_enabled() else "off")
+        return 0
     cmd = args[0] if args else ""
     arg = args[1] if len(args) > 1 else ""
     if cmd and cmd not in COMMANDS:

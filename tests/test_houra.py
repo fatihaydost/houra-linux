@@ -946,6 +946,31 @@ class HouraTests(unittest.TestCase):
                 txt = path.read_text(encoding="utf-8")
                 self.assertIsNone(re.search(r"pixelSize:\s*[0-9]+\.[0-9]+", txt), f"Fractional font.pixelSize in {path}")
 
+    def test_launch_at_login_autostart_entry(self) -> None:
+        from unittest import mock
+        from houra import autostart
+        with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": td}):
+            path = Path(td) / "autostart" / "io.github.fatihaydost.Houra.desktop"
+            self.assertFalse(autostart.is_enabled())
+            with mock.patch("shutil.which", return_value=None), \
+                 mock.patch.object(autostart.sys, "executable", "/opt/my py/python3"):
+                self.assertTrue(autostart.set_enabled(True))
+            body = path.read_text(encoding="utf-8")
+            self.assertIn('\nExec="/opt/my py/python3" -m houra\n', body)
+            self.assertIn(f"\nPath={autostart.REPO_DIR}\n", body)
+            self.assertIn("X-GNOME-Autostart-enabled=true", body)
+            with mock.patch("shutil.which", return_value="/usr/bin/houra"):
+                autostart.set_enabled(True)
+            self.assertIn("\nExec=houra\n", path.read_text(encoding="utf-8"))
+            self.assertFalse(autostart.set_enabled(False))
+            self.assertFalse(path.exists())
+            env = dict(os.environ, XDG_CONFIG_HOME=td)
+            for arg, want in (("on", "on"), ("off", "off")):
+                res = subprocess.run(["python3", "-m", "houra", "--login", arg], cwd=str(REPO), env=env,
+                                     capture_output=True, text=True, timeout=60, check=False)
+                self.assertEqual((res.returncode, res.stdout.strip()), (0, want), res.stderr)
+                self.assertEqual(path.exists(), want == "on")
+
     def test_qml_smoke_loads_headless(self) -> None:
         env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
         with tempfile.TemporaryDirectory() as td:

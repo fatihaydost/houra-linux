@@ -391,6 +391,69 @@ Item {
               }
             }
           }
+
+          Rectangle { width: parent.width; height: 1; color: root.tokens.line || Qt.rgba(1, 1, 1, 0.08) }
+
+          // Launch at login (XDG autostart entry)
+          Item {
+            width: parent.width
+            height: 36
+
+            Column {
+              anchors.left: parent.left
+              anchors.right: loginSwitch.left
+              anchors.rightMargin: 12
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: 2
+
+              Text {
+                textFormat: Text.PlainText
+                text: Theme.t(root.lang, "Girişte başlat", "Launch at login")
+                font.family: root.fontFamily
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                color: root.tokens.ink || "#ffffff"
+              }
+
+              Text {
+                textFormat: Text.PlainText
+                width: parent.width
+                elide: Text.ElideRight
+                text: Theme.t(root.lang, "Oturum açtığında Houra arka planda başlar.", "Houra starts in the background when you log in.")
+                font.family: root.fontFamily
+                font.pixelSize: 11
+                color: root.tokens.muted || "#888888"
+              }
+            }
+
+            Rectangle {
+              id: loginSwitch
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              width: 44
+              height: 24
+              radius: 12
+              color: Host.autostartEnabled ? (root.tokens.primaryBg || "#ffffff") : (root.tokens.card2 || "#222228")
+              border.width: 1
+              border.color: root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.16)
+
+              Rectangle {
+                x: Host.autostartEnabled ? 22 : 2
+                y: 2
+                width: 20
+                height: 20
+                radius: 10
+                color: Host.autostartEnabled ? (root.tokens.primaryInk || "#000000") : (root.tokens.secondary || "#aaaaaa")
+                Behavior on x { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+              }
+
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: Host.setAutostart(!Host.autostartEnabled)
+              }
+            }
+          }
         }
       }
 
