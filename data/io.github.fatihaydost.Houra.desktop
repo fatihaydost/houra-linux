@@ -1,0 +1,20 @@
+[Desktop Entry]
+Type=Application
+Name=Houra
+GenericName=Focus Timer
+Comment=A calm focus timer with on-screen counter, breaks and local statistics
+Exec=houra
+Icon=io.github.fatihaydost.Houra
+Terminal=false
+Categories=Utility;
+Keywords=focus;pomodoro;timer;
+StartupNotify=false
+Actions=NewSession;Panel;
+
+[Desktop Action NewSession]
+Name=New session
+Exec=houra newSession
+
+[Desktop Action Panel]
+Name=Open panel
+Exec=houra panel

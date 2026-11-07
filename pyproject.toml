@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "houra"
+version = "1.0.0"
+description = "A calm focus timer for the Linux desktop (PySide6 + QML)"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+# PySide6 is intentionally not listed: use the distribution package (e.g. pacman `pyside6`)
+# so Houra runs on the system Qt and can load the system `org.kde.layershell` QML module.
+dependencies = []
+
+[project.scripts]
+houra = "houra.app:main"
+
+[tool.setuptools]
+packages = ["houra", "houra.backend"]
+
+[tool.setuptools.package-data]
+houra = ["qml/**/*", "assets/*.png"]
