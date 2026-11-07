@@ -45,7 +45,7 @@ Item {
     width: parent.width + ((!root.drawerMode && root.edgeSide >= 0) ? root.cornerR : 0)
     height: parent.height
     radius: root.cornerR
-    color: root.tokens.popup || Qt.rgba(16 / 255, 16 / 255, 19 / 255, 0.97)
+    color: Theme.withAlpha(root.tokens.popup || "#101013", 1.0)
     border.width: 1
     border.color: root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.16)
   }
@@ -96,7 +96,20 @@ Item {
     if (service) noteField.text = service.sessionNote || ""
   }
 
+  // Thin scroll hint: shows only when the card hits its max height and content overflows
+  Rectangle {
+    visible: !root.drawerMode && cardFlick.contentHeight > cardFlick.height + 1
+    x: root.width - 6
+    y: cardFlick.y + cardFlick.visibleArea.yPosition * cardFlick.height
+    width: 3
+    height: cardFlick.visibleArea.heightRatio * cardFlick.height
+    radius: 1.5
+    z: 2
+    color: root.tokens.faint || Qt.rgba(1, 1, 1, 0.20)
+  }
+
   Flickable {
+    id: cardFlick
     anchors.fill: parent
     anchors.margins: 18
     contentWidth: width

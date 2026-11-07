@@ -15,6 +15,12 @@ Window {
   visible: false
   color: "transparent"
   flags: Qt.FramelessWindowHint
+  // Qt re-picks the QScreen from the window position (default 0,0 = leftmost output),
+  // and layer-shell-qt binds the surface to that QScreen: keep the geometry on our screen.
+  x: screen ? screen.virtualX : 0
+  y: screen ? screen.virtualY : 0
+  width: screen ? screen.width : 1280
+  height: screen ? screen.height : 720
 
   LS.Window.layer: layer === "overlay" ? LS.Window.LayerOverlay : LS.Window.LayerTop
   LS.Window.anchors: LS.Window.AnchorLeft | LS.Window.AnchorRight | LS.Window.AnchorTop | LS.Window.AnchorBottom

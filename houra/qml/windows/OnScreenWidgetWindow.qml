@@ -432,7 +432,7 @@ Scope {
           width: overlayWin.isEdgeStyle ? (parent.width + 16) : parent.width
           height: parent.height
           radius: 16
-          color: root.tokens.popup || "#141418"
+          color: Theme.withAlpha(root.tokens.popup || "#141418", 1.0)
           border.width: 1
           border.color: root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.22)
         }
@@ -591,7 +591,7 @@ Scope {
           width: root.dragging ? parent.width : (parent.width + 18)
           height: parent.height
           radius: 18
-          color: root.tokens.popup || "#131317"
+          color: Theme.withAlpha(root.tokens.popup || "#131317", 1.0)
           border.width: 1
           border.color: root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.16)
         }
@@ -733,7 +733,7 @@ Scope {
           width: Math.min(148, Math.max(stripClockTxt.implicitWidth, stripHeadTxt.implicitWidth) + 20)
           height: stripPillCol.implicitHeight + 12
           radius: 10
-          color: root.tokens.popup || "#131317"
+          color: Theme.withAlpha(root.tokens.popup || "#131317", 1.0)
           border.width: 1
           border.color: root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.16)
 
@@ -779,7 +779,7 @@ Scope {
         visible: !root.nudgeShown && root.styleName === "capsule"
         anchors.fill: parent
         radius: 31
-        color: root.tokens.popup || "#131317"
+        color: Theme.withAlpha(root.tokens.popup || "#131317", 1.0)
         border.width: 1
         border.color: root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.16)
 
@@ -924,7 +924,7 @@ Scope {
         visible: !root.nudgeShown && root.styleName === "card"
         anchors.fill: parent
         radius: 26
-        color: root.tokens.popup || "#131317"
+        color: Theme.withAlpha(root.tokens.popup || "#131317", 1.0)
         border.width: 1
         border.color: root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.16)
 
@@ -1017,7 +1017,7 @@ Scope {
         visible: !root.nudgeShown && root.styleName === "ring"
         anchors.fill: parent
         radius: 40
-        color: root.tokens.popup || "#131317"
+        color: Theme.withAlpha(root.tokens.popup || "#131317", 1.0)
         border.width: 1
         border.color: root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.16)
 
@@ -1069,7 +1069,8 @@ Scope {
       visible: root.detailOpen && !root.nudgeShown
       x: overlayWin.detailX
       y: overlayWin.detailY
-      maxCardHeight: Math.min(640, Math.max(360, overlayWin.sh - overlayWin.topSafe - 16))
+      // Cap to the room this output really has (short laptop panels), content scrolls inside
+      maxCardHeight: Math.min(640, overlayWin.sh - overlayWin.topSafe - 20)
       drawerMode: root.styleName === "strip"
       service: root.service
       tokens: root.tokens

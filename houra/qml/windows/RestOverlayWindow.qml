@@ -50,6 +50,7 @@ Scope {
     holding = false
     holdProgress = 0.0
     showHoldHint = false
+    exitOnRelease = false
   }
 
   NumberAnimation {
@@ -80,8 +81,45 @@ Scope {
       if (root.holdProgress >= 1.0) {
         holdTimer.stop()
         root.holding = false
-        root.holdProgress = 0.0
-        if (root.service) root.service.emergencyExit()
+        // Keyboard hold: exit on key release (fill stays full), else auto-repeat leaks into the app below
+        if (root.keyHold) {
+          root.exitOnRelease = true
+        } else {
+          root.holdProgress = 0.0
+          if (root.service) root.service.emergencyExit()
+        }
+      }
+    }
+  }
+
+  property bool keyHold: false
+  property bool exitOnRelease: false
+
+  function startHold(byKey) {
+    keyHold = !!byKey
+    exitOnRelease = false
+    drainAnim.stop()
+    holding = true
+    holdProgress = 0.0
+    holdTimer.start()
+  }
+
+  function endHold() {
+    if (exitOnRelease) {
+      exitOnRelease = false
+      keyHold = false
+      if (service) service.emergencyExit()
+      return
+    }
+    if (holdTimer.running || holding) {
+      holdTimer.stop()
+      holding = false
+      if (holdProgress < 1.0) {
+        showHoldHint = true
+        hintHideTimer.restart()
+        drainAnim.start()
+      } else {
+        holdProgress = 0.0
       }
     }
   }
@@ -180,8 +218,15 @@ Scope {
         FocusScope {
           anchors.fill: parent
           focus: breakWin.isPrimary
+          // Holding Enter/Space = holding Emergency; everything else (Esc too) is swallowed
+          function isHoldKey(k) { return k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space }
           Keys.onPressed: function(event) {
             event.accepted = true
+            if (isHoldKey(event.key) && !event.isAutoRepeat && !root.holding && !root.exitOnRelease) root.startHold(true)
+          }
+          Keys.onReleased: function(event) {
+            event.accepted = true
+            if (isHoldKey(event.key) && !event.isAutoRepeat) root.endHold()
           }
         }
 
@@ -319,25 +364,8 @@ Scope {
               anchors.fill: parent
               hoverEnabled: true
               cursorShape: Qt.PointingHandCursor
-              onPressed: {
-                drainAnim.stop()
-                root.holding = true
-                root.holdProgress = 0.0
-                holdTimer.start()
-              }
-              onReleased: {
-                if (holdTimer.running || root.holding) {
-                  holdTimer.stop()
-                  root.holding = false
-                  if (root.holdProgress < 1.0) {
-                    root.showHoldHint = true
-                    hintHideTimer.restart()
-                    drainAnim.start()
-                  } else {
-                    root.holdProgress = 0.0
-                  }
-                }
-              }
+              onPressed: root.startHold(false)
+              onReleased: root.endHold()
               onCanceled: {
                 holdTimer.stop()
                 root.holding = false
