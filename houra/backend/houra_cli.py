@@ -2747,6 +2747,25 @@ def handle_command(cmd: str, payload: dict[str, Any]) -> dict[str, Any]:
                 clean_payload.pop("activeSessionId", None)
             return build_snapshot(conn, clean_payload)
 
+        if cmd == "update-session":
+            sid = int(payload["sessionId"])
+            cid = int(payload.get("categoryId") or 0)
+            cat_row = conn.execute("SELECT name FROM categories WHERE id = ?", (cid,)).fetchone()
+            if cat_row is None:
+                return {"ok": False, "error": f"Unknown category: {cid}"}
+            if conn.execute("SELECT 1 FROM sessions WHERE id = ?", (sid,)).fetchone() is None:
+                return {"ok": False, "error": f"Unknown session: {sid}"}
+            goal = str(payload.get("goal") or "").strip() or str(cat_row["name"]).strip()
+            if "note" in payload:
+                conn.execute(
+                    "UPDATE sessions SET category_id = ?, goal = ?, note = ? WHERE id = ?",
+                    (cid, goal, str(payload.get("note") or ""), sid),
+                )
+            else:
+                conn.execute("UPDATE sessions SET category_id = ?, goal = ? WHERE id = ?", (cid, goal, sid))
+            conn.commit()
+            return build_snapshot(conn, payload)
+
         if cmd == "mark-emergency":
             sid = int(payload["sessionId"])
             conn.execute("UPDATE sessions SET emergency = 1 WHERE id = ?", (sid,))

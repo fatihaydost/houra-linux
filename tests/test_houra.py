@@ -197,6 +197,37 @@ class HouraTests(unittest.TestCase):
                         missing.append(f"{path.relative_to(ROOT)}:{i + 1}")
         self.assertEqual(missing, [], "Text items without textFormat PlainText")
 
+    def test_update_session_retags_past_session(self) -> None:
+        import sqlite3
+        self.rpc("snapshot")
+        cid = self.rpc("add-category", {"name": "Writing", "color": "#4fc08d"})["createdCategoryId"]
+        sid = self.rpc("start-session", {"categoryId": 1, "goal": "draft", "workMin": 25, "restMin": 5})["startedSession"]["id"]
+        self.rpc("finish-session", {"sessionId": sid, "focusSec": 600, "skipBreak": True})
+
+        snap = self.rpc("update-session", {"sessionId": sid, "categoryId": cid, "goal": "Chapter 2", "note": "went well"})
+        self.assertTrue(snap["ok"])
+        self.assertIn("history", snap)
+        with sqlite3.connect(self.env["HOURA_DB"]) as conn:
+            row = conn.execute("SELECT category_id, goal, note FROM sessions WHERE id = ?", (sid,)).fetchone()
+        self.assertEqual(row, (cid, "Chapter 2", "went well"))
+
+        # Empty goal falls back to the category name; omitted note stays untouched
+        self.rpc("update-session", {"sessionId": sid, "categoryId": cid, "goal": "  "})
+        with sqlite3.connect(self.env["HOURA_DB"]) as conn:
+            row = conn.execute("SELECT goal, note FROM sessions WHERE id = ?", (sid,)).fetchone()
+        self.assertEqual(row, ("Writing", "went well"))
+
+        # Unknown category is rejected and nothing changes
+        proc = subprocess.run(
+            ["python3", str(CLI), "update-session", json.dumps({"sessionId": sid, "categoryId": 9999, "goal": "x"})],
+            env=self.env, capture_output=True, text=True,
+        )
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertFalse(json.loads(proc.stdout)["ok"])
+        with sqlite3.connect(self.env["HOURA_DB"]) as conn:
+            row = conn.execute("SELECT category_id, goal FROM sessions WHERE id = ?", (sid,)).fetchone()
+        self.assertEqual(row, (cid, "Writing"))
+
     def test_stale_free_session_keeps_its_checkpoint(self) -> None:
         # A free-mode row left open for days must not be closed with the whole gap as focus time
         import sqlite3
