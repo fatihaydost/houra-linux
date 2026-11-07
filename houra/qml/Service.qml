@@ -755,6 +755,26 @@ Item {
     enqueueRpc("delete-session", _withQueryFilters({ sessionId: sid }), null)
   }
 
+  function updateSession(targetSid, catId, goal, note) {
+    var sid = Number(targetSid) || 0
+    if (sid <= 0) return
+    var p = { sessionId: sid, categoryId: Number(catId) || 0, goal: String(goal || "") }
+    var live = sid === sessionId && phase !== "idle"
+    if (live) {
+      // note of the running session is owned by the detail card's autosave
+      sessionCategoryId = p.categoryId
+      sessionGoal = p.goal.trim().length > 0 ? p.goal.trim() : ""
+    } else if (note !== undefined) {
+      p.note = String(note || "")
+    }
+    enqueueRpc("update-session", _withQueryFilters(p), function(res) {
+      if (live && res && res.ok && sid === svcRoot.sessionId && svcRoot.sessionGoal === "") {
+        var cats = res.categories || []
+        for (var i = 0; i < cats.length; i++) if (Number(cats[i].id) === p.categoryId) svcRoot.sessionGoal = String(cats[i].name)
+      }
+    })
+  }
+
   function emergencyExit() {
     if (phase !== "rest") return
     breakOverlayVisible = false

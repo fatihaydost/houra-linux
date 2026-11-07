@@ -13,7 +13,9 @@ Item {
   property bool kbActive: false
   property int kbIndex: 0
   property string focusArea: "list" // "notesFilter" | "categoryFilter" | "list"
-  readonly property bool isEditingText: false
+  readonly property bool isEditingText: !!(activeEditor && activeEditor.isEditingText)
+  property int editingId: 0
+  property var activeEditor: null
 
   onKbPageActiveChanged: {
     if (!kbPageActive) focusArea = "list"
@@ -49,9 +51,22 @@ Item {
     else if (kbIndex >= flatSessions.length) kbIndex = flatSessions.length - 1
   }
 
-  function releaseTextFocus() { return false }
+  function releaseTextFocus() { return !!(activeEditor && activeEditor.releaseTextFocus()) }
 
-  function hasOpenOverlay() { return false }
+  function hasOpenOverlay() { return editingId !== 0 }
+
+  function openEditor(sid) {
+    confirmDeleteId = 0
+    editingId = sid
+    if (!isExpanded(sid)) toggleExpanded(sid)
+  }
+
+  function closeEditor() {
+    var sid = editingId
+    editingId = 0
+    activeEditor = null
+    if (sid !== 0 && isExpanded(sid)) toggleExpanded(sid)
+  }
 
   function _focusStops() {
     var stops = ["notesFilter"]
@@ -85,6 +100,10 @@ Item {
   }
 
   function dismissOverlay() {
+    if (editingId !== 0) {
+      closeEditor()
+      return true
+    }
     if (confirmDeleteId !== 0) {
       deleteResetTimer.stop()
       confirmDeleteId = 0
@@ -124,6 +143,8 @@ Item {
   function handleKey(event) {
     var k = event.key
     var count = flatSessions.length
+
+    if (editingId !== 0 && activeEditor) return activeEditor.handleKey(event)
 
     if (focusArea === "notesFilter") {
       if ((k === Qt.Key_Left || k === Qt.Key_Right || k === Qt.Key_Space || k === Qt.Key_Return || k === Qt.Key_Enter) && service) {
@@ -180,7 +201,11 @@ Item {
     if ((k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) && count > 0) {
       kbActive = true
       var s = flatSessions[Math.max(0, Math.min(count - 1, kbIndex))]
-      if (s) toggleExpanded(s.id)
+      // Enter cycles: collapsed -> expanded -> editor
+      if (s) {
+        if (isExpanded(s.id)) openEditor(Number(s.id))
+        else toggleExpanded(s.id)
+      }
       return true
     }
     if ((k === Qt.Key_Delete || k === Qt.Key_Backspace) && count > 0 && service) {
@@ -644,6 +669,35 @@ Item {
                     }
 
                     Rectangle {
+                      visible: (sHover.hovered || expanded || sessCard.kbSelected) && root.editingId !== Number(s.id)
+                      anchors.verticalCenter: parent.verticalCenter
+                      width: editSessionLbl.implicitWidth + 14
+                      height: 22
+                      radius: 6
+                      color: editSessionArea.containsMouse ? (root.tokens.raised || "#26262f") : (root.tokens.card2 || "#1f1f25")
+                      border.width: 1
+                      border.color: root.tokens.line || Qt.rgba(1, 1, 1, 0.10)
+
+                      Text {
+                        textFormat: Text.PlainText
+                        id: editSessionLbl
+                        anchors.centerIn: parent
+                        text: Theme.t(root.lang, "Düzenle", "Edit")
+                        font.family: root.fontFamily
+                        font.pixelSize: 10
+                        color: editSessionArea.containsMouse ? (root.tokens.ink || "#ffffff") : (root.tokens.muted || "#888888")
+                      }
+
+                      MouseArea {
+                        id: editSessionArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.openEditor(Number(s.id))
+                      }
+                    }
+
+                    Rectangle {
                       readonly property bool confirming: root.confirmDeleteId === Number(s.id)
                       visible: sHover.hovered || expanded || confirming || sessCard.kbSelected
                       anchors.verticalCenter: parent.verticalCenter
@@ -706,6 +760,22 @@ Item {
                     color: root.tokens.line || Qt.rgba(1, 1, 1, 0.08)
                   }
 
+                  Loader {
+                    active: root.editingId === Number(s.id)
+                    visible: active
+                    width: parent.width
+                    sourceComponent: SessionEditor {
+                      width: rowCol.width
+                      service: root.service
+                      session: s
+                      tokens: root.tokens
+                      lang: root.lang
+                      fontFamily: root.fontFamily
+                      onClosed: root.closeEditor()
+                    }
+                    onLoaded: root.activeEditor = item
+                  }
+
                   Repeater {
                     model: (expanded && s.todos) ? s.todos.length : 0
                     delegate: Row {
@@ -749,7 +819,7 @@ Item {
 
                   Text {
                     textFormat: Text.PlainText
-                    visible: !hasDetails
+                    visible: !hasDetails && root.editingId !== Number(s.id)
                     text: Theme.t(root.lang, "Bu oturuma ait görev veya not yok.", "No tasks or notes attached to this session.")
                     font.family: root.fontFamily
                     font.pixelSize: 11
