@@ -218,8 +218,19 @@ Column {
         height: 26
         radius: 7
         color: isSave ? (root.tokens.primaryBg || "#ffffff") : (root.tokens.card2 || "#1f1f25")
-        border.width: kbOn ? 2 : 1
-        border.color: kbOn ? (root.tokens.accent || "#4c8df0") : (root.tokens.line || Qt.rgba(1, 1, 1, 0.10))
+        border.width: 1
+        border.color: root.tokens.line || Qt.rgba(1, 1, 1, 0.10)
+
+        // Focus ring outside the button: on the filled Save button an inner accent border is invisible.
+        Rectangle {
+          visible: kbOn
+          anchors.fill: parent
+          anchors.margins: -3
+          radius: parent.radius + 3
+          color: "transparent"
+          border.width: 2
+          border.color: root.tokens.accent || "#4c8df0"
+        }
 
         Text {
           id: btnLbl
