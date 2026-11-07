@@ -415,6 +415,19 @@ Item {
     openNewSession(Number(td.categoryId) || 0, "", "", String(td.key || ""), 0)
   }
 
+  function weeklyTaskCopied(wt) {
+    var t = String((wt && wt.title) || "").trim().toLowerCase()
+    var list = ((todayData || {}).todos) || []
+    for (var i = 0; i < list.length; i++) if (String(list[i].title || "").trim().toLowerCase() === t) return true
+    return false
+  }
+
+  // Local todo only: the weekly Markdown file is never written.
+  function copyWeeklyTaskToToday(wt) {
+    if (!wt || weeklyTaskCopied(wt)) return
+    addTodo(String(wt.title || ""), "", { categoryId: Number(wt.categoryId) || 0 })
+  }
+
   function importTodoistTaskToToday(td) {
     if (!td) return
     enqueueRpc("add-todo", _withQueryFilters({

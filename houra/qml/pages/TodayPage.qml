@@ -388,7 +388,7 @@ Item {
       } else if (cur.kind === "todoist") {
         if (cur.item.id) service.setTodoistTaskCompleted(cur.item.id, true, 0)
       } else if (cur.kind === "weekly") {
-        service.openNewSessionForWeekly(cur.item)
+        service.copyWeeklyTaskToToday(cur.item)
       }
       return true
     }
@@ -1826,7 +1826,7 @@ Item {
                   textFormat: Text.PlainText
                   anchors.left: parent.left
                   anchors.verticalCenter: parent.verticalCenter
-                  text: Theme.t(root.lang, "BU HAFTA", "THIS WEEK")
+                  text: Theme.t(root.lang, "BU HAFTA (OBSIDIAN)", "THIS WEEK IN OBSIDIAN")
                   font.family: root.fontFamily
                   font.pixelSize: 10
                   font.weight: Font.Bold
@@ -1992,7 +1992,7 @@ Item {
                           Text {
                             textFormat: Text.PlainText
                             id: wtTitleTxt
-                            width: Math.max(60, parent.width - ((wkRowArea.containsMouse || wkRowRect.kbSelected) ? 48 : 22))
+                            width: Math.max(60, parent.width - ((wkRowArea.containsMouse || wkRowRect.kbSelected) ? 48 : 22) - 26)
                             anchors.verticalCenter: parent.verticalCenter
                             text: wt.title || ""
                             wrapMode: Text.WordWrap
@@ -2013,6 +2013,7 @@ Item {
 
                         MouseArea {
                           id: wkRowArea
+                          anchors.rightMargin: 30
                           anchors.fill: parent
                           hoverEnabled: true
                           cursorShape: Qt.PointingHandCursor
@@ -2020,6 +2021,36 @@ Item {
                             if (root.service) {
                               root.service.openNewSessionForWeekly(wt)
                             }
+                          }
+                        }
+
+                        // Copy to today's local list (Space on the keyboard)
+                        Rectangle {
+                          readonly property bool copied: !!(root.service && root.service.weeklyTaskCopied(wt))
+                          anchors.right: parent.right
+                          anchors.rightMargin: 4
+                          anchors.verticalCenter: parent.verticalCenter
+                          width: 22
+                          height: 22
+                          radius: 6
+                          color: wkCopyArea.containsMouse && !copied ? (root.tokens.raised || "#26262f") : "transparent"
+                          opacity: copied ? 0.45 : 1
+
+                          Text {
+                            textFormat: Text.PlainText
+                            anchors.centerIn: parent
+                            text: parent.copied ? "✓" : "↓"
+                            font.pixelSize: 12
+                            color: wkCopyArea.containsMouse ? (root.tokens.ink || "#ffffff") : (root.tokens.muted || "#888888")
+                          }
+
+                          MouseArea {
+                            id: wkCopyArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            enabled: !parent.copied
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: if (root.service) root.service.copyWeeklyTaskToToday(wt)
                           }
                         }
                       }
