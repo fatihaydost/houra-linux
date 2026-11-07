@@ -32,6 +32,9 @@ Scope {
   property var service: null
   property bool open: false
   property bool closingFromHost: false
+  // Opened by the break ending on its own: shown without taking keyboard focus, and inert to
+  // typing until a click or Tab, so keys meant for another app never start a session
+  property bool passive: false
   property string lang: service ? service.lang : "en"
   property var tokens: service ? service.tokens : ({})
   property string fontFamily: "Sans Serif"
@@ -342,7 +345,8 @@ Scope {
     }
   }
 
-  function showModal(prefillCatId, prefillGoal, prefillWeeklyKey, prefillTodoistKey, prefillTodoId) {
+  function showModal(prefillCatId, prefillGoal, prefillWeeklyKey, prefillTodoistKey, prefillTodoId, passiveOpen) {
+    passive = !!passiveOpen
     var nextScreen = _resolveFocusedScreen()
     var nextMonName = nextScreen && nextScreen.name ? String(nextScreen.name) : ""
     var nextWsId = _currentWorkspaceId()
@@ -432,14 +436,14 @@ Scope {
         root.closingFromHost = false
         win.visible = true
         Qt.callLater(function() {
-          if (root.open) goalField.forceActiveFocus()
+          if (root.open) (root.passive ? modalKeySink : goalField).forceActiveFocus()
         })
       })
     } else {
       closingFromHost = false
       win.visible = true
       Qt.callLater(function() {
-        if (root.open) goalField.forceActiveFocus()
+        if (root.open) (root.passive ? modalKeySink : goalField).forceActiveFocus()
       })
     }
   }
@@ -564,7 +568,7 @@ Scope {
     }
 
     onVisibleChanged: {
-      if (visible) { raise(); requestActivate() }
+      if (visible) { raise(); if (!root.passive) requestActivate() }
       if (!visible && !root.closingFromHost) root.closeModal()
     }
 
@@ -573,6 +577,14 @@ Scope {
       anchors.fill: parent
       color: root.tokens.win || "#101013"
       clip: true
+
+      // First click wakes a passive window and still reaches the control under it
+      MouseArea {
+        anchors.fill: parent
+        z: 100
+        enabled: root.passive
+        onPressed: function(mouse) { root.passive = false; mouse.accepted = false }
+      }
 
       FocusScope {
         id: modalKeyScope
@@ -591,6 +603,13 @@ Scope {
           if ((mods & Qt.ControlModifier) && (k === Qt.Key_W || k === Qt.Key_Q)) {
             event.accepted = true
             root.closeModal()
+            return
+          }
+
+          if (root.passive) {
+            event.accepted = true
+            if (k === Qt.Key_Escape) root.closeModal()
+            else if (k === Qt.Key_Tab || k === Qt.Key_Backtab) { root.passive = false; goalField.forceActiveFocus() }
             return
           }
 
@@ -2121,11 +2140,9 @@ Scope {
                 anchors.rightMargin: 10
                 anchors.verticalCenter: parent.verticalCenter
                 elide: Text.ElideRight
-                text: Theme.t(
-                  root.lang,
-                  "↵ başlatır · Tab ve ok tuşları dolaşır",
-                  "↵ starts · Tab & arrows navigate"
-                )
+                text: root.passive
+                  ? Theme.t(root.lang, "Mola bitti · devam için tıkla ya da Tab", "Break over · click or Tab to continue")
+                  : Theme.t(root.lang, "↵ başlatır · Tab ve ok tuşları dolaşır", "↵ starts · Tab & arrows navigate")
                 font.family: root.fontFamily
                 font.pixelSize: 10
                 color: root.tokens.faint || "#555555"

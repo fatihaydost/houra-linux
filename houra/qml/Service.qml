@@ -379,7 +379,7 @@ Item {
         if (rem <= 0) {
           svcRoot.phase = "idle"
           svcRoot._clearActiveSessionState()
-          svcRoot.openNewSession(0, "")
+          svcRoot.openNewSession(0, "", "", "", 0, true)
         }
       }
     }
@@ -424,7 +424,7 @@ Item {
     enqueueRpc("snapshot", _withQueryFilters({}), null)
   }
 
-  function openNewSession(prefillCatId, prefillGoal, prefillWeeklyKey, prefillTodoistKey, prefillTodoId) {
+  function openNewSession(prefillCatId, prefillGoal, prefillWeeklyKey, prefillTodoistKey, prefillTodoId, passiveOpen) {
     if (phase === "rest") {
       phase = "idle"
       _clearActiveSessionState()
@@ -435,7 +435,8 @@ Item {
       String(prefillGoal || ""),
       String(prefillWeeklyKey || ""),
       String(prefillTodoistKey || ""),
-      Number(prefillTodoId) || 0
+      Number(prefillTodoId) || 0,
+      !!passiveOpen
     )
   }
 
