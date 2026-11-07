@@ -450,7 +450,7 @@ def _expand_wildcards(pattern_path: str) -> Path | None:
 
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
-_TASK_RE = re.compile(r"^(\s*)[-*+]\s+\[([ /wWxX])\]\s+(.+?)\s*$")
+_TASK_RE = re.compile(r"^(\s*)[-*+]\s+\[([ /wWxX\-mM])\]\s+(.+?)\s*$")
 _BULLET_RE = re.compile(r"^(\s*)[-*+]\s+(.+?)\s*$")
 _WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
 _TAG_RE = re.compile(r"(?:^|\s)#([\w\-/çğıöşüÇĞİÖŞÜ]+)")
@@ -537,7 +537,7 @@ def load_weekly_tasks(
             if indent_spaces < 2:
                 current_subgroup = title
 
-            if marker in ("x", "X"):
+            if marker in ("x", "X", "-", "m", "M"):  # done, dropped, moved
                 continue
             if "→ Hafta" in body or "-> Hafta" in body:
                 continue

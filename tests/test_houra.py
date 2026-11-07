@@ -281,6 +281,8 @@ class HouraTests(unittest.TestCase):
             "  - [ ] Verify automated security baseline\n"
             "- [w] Waiting on review\n"
             "- [x] Completed item\n"
+            "- [-] Dropped item\n"
+            "- [m] Moved item\n"
             "- [ ] Deferred item → Hafta 49\n"
             "- UI Polish\n"
             "  - [/] Test multi-monitor DriftingLights ✅ 2026-10-29\n",
