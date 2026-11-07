@@ -1,0 +1,321 @@
+"""Houra desktop entry point: PySide6 host for the QML UI and the stdlib backend."""
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+from PySide6.QtCore import (
+    Property, QMetaObject, QObject, QRect, QRunnable, QThreadPool, QTimer, QUrl, Q_ARG,
+    Q_RETURN_ARG, Qt, Signal, Slot, qInstallMessageHandler, QtMsgType,
+)
+from PySide6.QtDBus import QDBusConnection, QDBusInterface
+from PySide6.QtGui import QAction, QGuiApplication, QIcon, QRegion
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
+from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
+from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
+
+from .backend import houra_cli
+
+APP_ID = "io.github.fatihaydost.Houra"
+PKG_DIR = Path(__file__).resolve().parent
+QML_DIR = PKG_DIR / "qml"
+ICON_PATH = PKG_DIR / "assets" / "icon.png"
+COMMANDS = {
+    "newSession", "panel", "open", "stats", "tab", "close", "toggle", "pause", "finish",
+    "closeSession", "cancel", "syncTodoist", "style", "status",
+}
+
+
+class _Call(QRunnable):
+    def __init__(self, host: "Host", call_id: int, cmd: str, payload: dict):
+        super().__init__()
+        self.host, self.call_id, self.cmd, self.payload = host, call_id, cmd, payload
+
+    def run(self) -> None:
+        try:
+            # JSON round trip keeps the old CLI contract (plain types both ways)
+            payload = json.loads(json.dumps(self.payload or {}))
+            result = houra_cli.handle_command(self.cmd, payload if isinstance(payload, dict) else {})
+            result = json.loads(json.dumps(result, ensure_ascii=False))
+        except Exception as exc:  # backend errors must not stall the QML queue
+            result = {"ok": False, "error": str(exc)}
+        self.host.callFinished.emit(self.call_id, result)
+
+
+class Host(QObject):
+    callFinished = Signal(int, "QVariant")
+    screenChanged = Signal()
+    dndChanged = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._pool = QThreadPool(self)
+        self._pool.setMaxThreadCount(1)  # serialized: keeps SQLite write ordering
+        self._next_id = 0
+        self._sound = None
+        self._dnd_cookie = 0
+        self.tray: QSystemTrayIcon | None = None
+        self.pause_action: QAction | None = None
+        self._notif = QDBusInterface(
+            "org.freedesktop.Notifications", "/org/freedesktop/Notifications",
+            "org.freedesktop.Notifications", QDBusConnection.sessionBus(),
+        )
+        self._dnd_supported = False
+        if self._notif.isValid():
+            caps = self._notif.call("GetCapabilities").arguments()
+            self._dnd_supported = bool(caps) and "inhibitions" in (caps[0] or [])
+
+    @Slot(str, "QVariant", result=int)
+    def call(self, cmd: str, payload) -> int:
+        self._next_id += 1
+        self._pool.start(_Call(self, self._next_id, cmd, payload if isinstance(payload, dict) else {}))
+        return self._next_id
+
+    @Slot(QObject, "QVariantList")
+    def setInputMask(self, window, rects) -> None:
+        if window is None:
+            return
+        if not rects:
+            window.setMask(QRegion())
+            return
+        region = QRegion()
+        for r in rects:
+            w, h = int(r.get("width", 0)), int(r.get("height", 0))
+            if w > 0 and h > 0:
+                region = region.united(QRegion(QRect(int(r.get("x", 0)), int(r.get("y", 0)), w, h)))
+        # An empty QRegion would mean "no mask"; a pixel outside the surface means "no input"
+        window.setMask(region if not region.isEmpty() else QRegion(-1, -1, 1, 1))
+
+    @Slot(result=str)
+    def clipboardText(self) -> str:
+        return QGuiApplication.clipboard().text()
+
+    def _get_dnd_supported(self) -> bool:
+        return self._dnd_supported
+
+    dndSupported = Property(bool, _get_dnd_supported, constant=True)
+
+    def _get_dnd(self) -> bool:
+        if not self._dnd_supported:
+            return False
+        if self._dnd_cookie:
+            return True
+        v = self._notif.property("Inhibited")
+        return bool(v)
+
+    doNotDisturb = Property(bool, _get_dnd, notify=dndChanged)
+
+    @Slot(bool, result=bool)
+    def setDoNotDisturb(self, on: bool) -> bool:
+        if not self._dnd_supported:
+            return False
+        if on and not self._dnd_cookie:
+            reply = self._notif.call("Inhibit", APP_ID, "Houra focus session", {})
+            args = reply.arguments()
+            self._dnd_cookie = int(args[0]) if args else 0
+        elif not on and self._dnd_cookie:
+            self._notif.call("UnInhibit", self._dnd_cookie)
+            self._dnd_cookie = 0
+        self.dndChanged.emit()
+        return True
+
+    def _get_active_screen(self) -> str:
+        win = QGuiApplication.focusWindow()
+        screen = win.screen() if win else QGuiApplication.primaryScreen()
+        return screen.name() if screen else ""
+
+    activeScreenName = Property(str, _get_active_screen, notify=screenChanged)
+
+    def _get_home(self) -> str:
+        return str(Path.home())
+
+    homeDir = Property(str, _get_home, constant=True)
+
+    @Slot(str)
+    def playSound(self, path: str) -> None:
+        if not path:
+            return
+        from PySide6.QtMultimedia import QSoundEffect
+        if self._sound is None:
+            self._sound = QSoundEffect(self)
+            self._sound.setVolume(0.6)
+        self._sound.setSource(QUrl.fromLocalFile(path))
+        self._sound.play()
+
+    @Slot(str, str, str)
+    def setTrayStatus(self, title: str, tooltip: str, phase: str) -> None:
+        if self.tray:
+            self.tray.setToolTip(tooltip or title)
+        if self.pause_action:
+            self.pause_action.setText("Resume" if phase == "paused" else "Pause")
+            self.pause_action.setEnabled(phase in ("focus", "paused"))
+
+
+def _send_to_running(cmd: str, arg: str) -> str | None:
+    sock = QLocalSocket()
+    sock.connectToServer(APP_ID)
+    if not sock.waitForConnected(500):
+        return None
+    sock.write((json.dumps([cmd, arg]) + "\n").encode())
+    sock.flush()
+    data = b""
+    while sock.waitForReadyRead(3000):
+        data += bytes(sock.readAll())
+        if data.endswith(b"\n"):
+            break
+    sock.disconnectFromServer()
+    return data.decode(errors="replace").strip()
+
+
+def _layer_shell_available(engine: QQmlApplicationEngine) -> bool:
+    if QGuiApplication.platformName() != "wayland":
+        return False
+    if "GNOME" in os.environ.get("XDG_CURRENT_DESKTOP", "").upper():
+        return False
+    probe = QQmlComponent(engine)
+    probe.setData(b"import QtQml\nimport org.kde.layershell 1.0\nQtObject {}\n", QUrl())
+    return probe.isReady()
+
+
+def _make_engine(app, host: Host, layer: bool) -> QQmlApplicationEngine:
+    engine = QQmlApplicationEngine()
+    engine.addImportPath(str(QML_DIR))
+    engine.addImportPath(str(QML_DIR / ("shell-layer" if layer else "shell-plain")))
+    engine.rootContext().setContextProperty("Host", host)
+    engine.warnings.connect(lambda ws: [print("QML:", w.toString(), file=sys.stderr) for w in ws])
+    return engine
+
+
+def _invoke(root: QObject, cmd: str, arg: str) -> str:
+    res = QMetaObject.invokeMethod(
+        root, "ipc", Qt.DirectConnection, Q_RETURN_ARG("QVariant"),
+        Q_ARG("QVariant", cmd), Q_ARG("QVariant", arg),
+    )
+    return str(res)
+
+
+def _smoke() -> int:
+    """Load every QML file headless; fail on any QML warning or error."""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    problems: list[str] = []
+
+    def handler(mode, ctx, msg):
+        if mode != QtMsgType.QtDebugMsg and ("qml" in msg.lower() or (ctx.file or "").endswith((".qml", ".js"))):
+            problems.append(f"{ctx.file}:{ctx.line}: {msg}")
+        sys.stderr.write(msg + "\n")
+
+    qInstallMessageHandler(handler)
+    app = QApplication(sys.argv[:1])
+    host = Host()
+    for layer in (False, True):
+        engine = _make_engine(app, host, layer)
+        engine.warnings.connect(lambda ws: problems.extend(w.toString() for w in ws))
+        files = sorted(QML_DIR.rglob("*.qml"))
+        for f in files:
+            if ("shell-plain" in f.parts and layer) or ("shell-layer" in f.parts and not layer):
+                continue
+            comp = QQmlComponent(engine, QUrl.fromLocalFile(str(f)))
+            if comp.isError():
+                problems.extend(e.toString() for e in comp.errors())
+        if not layer:
+            engine.load(QUrl.fromLocalFile(str(QML_DIR / "Service.qml")))
+            if not engine.rootObjects():
+                problems.append("Service.qml did not load")
+            else:
+                root = engine.rootObjects()[0]
+                _invoke(root, "newSession", "")
+                if not any(w.isVisible() for w in QGuiApplication.topLevelWindows()):
+                    problems.append("newSession did not show a window")
+                for cmd in ("status", "panel", "close"):
+                    _invoke(root, cmd, "")
+                QTimer.singleShot(1500, app.quit)
+                app.exec()
+        print(f"checked {len(files)} QML files (layer-shell={'on' if layer else 'off'})")
+    for p in problems:
+        print("QML PROBLEM:", p)
+    return 1 if problems else 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv if argv is None else argv)
+    args = argv[1:]
+    if args and args[0] == "--smoke":
+        return _smoke()
+    if args and args[0] == "--selftest":
+        return houra_cli.run_selftest()
+    cmd = args[0] if args else ""
+    arg = args[1] if len(args) > 1 else ""
+    if cmd and cmd not in COMMANDS:
+        print(f"usage: houra [{'|'.join(sorted(COMMANDS))}] [arg]", file=sys.stderr)
+        return 2
+
+    QGuiApplication.setDesktopFileName(APP_ID)
+    app = QApplication(argv[:1])
+    app.setApplicationName("Houra")
+    app.setOrganizationDomain("io.github.fatihaydost")
+    app.setQuitOnLastWindowClosed(False)
+    app.setWindowIcon(QIcon(str(ICON_PATH)))
+
+    reply = _send_to_running(cmd or "open", arg)
+    if reply is not None:
+        if reply and (cmd == "status" or reply.startswith("unknown")):
+            print(reply)
+        return 0
+
+    host = Host()
+    engine = _make_engine(app, host, _layer_shell_available(QQmlApplicationEngine()))
+    engine.load(QUrl.fromLocalFile(str(QML_DIR / "Service.qml")))
+    if not engine.rootObjects():
+        return 1
+    root = engine.rootObjects()[0]
+    run = lambda c, a="": _invoke(root, c, a)  # noqa: E731
+
+    QLocalServer.removeServer(APP_ID)
+    server = QLocalServer(app)
+    server.setSocketOptions(QLocalServer.UserAccessOption)
+    server.listen(APP_ID)
+
+    def on_conn():
+        sock = server.nextPendingConnection()
+
+        def on_read():
+            if not sock.canReadLine():
+                return
+            try:
+                c, a = json.loads(bytes(sock.readLine()).decode())
+            except Exception:
+                c, a = "", ""
+            out = run(str(c), str(a)) if c in COMMANDS else "unknown command"
+            sock.write((out + "\n").encode())
+            sock.flush()
+            sock.disconnectFromServer()
+
+        sock.readyRead.connect(on_read)
+        sock.disconnected.connect(sock.deleteLater)
+        on_read()  # the request may already be buffered
+
+    server.newConnection.connect(on_conn)
+
+    tray = QSystemTrayIcon(QIcon(str(ICON_PATH)), app)
+    tray.setToolTip("Houra")
+    menu = QMenu()
+    menu.addAction("New session", lambda: run("newSession"))
+    host.pause_action = menu.addAction("Pause", lambda: run("pause"))
+    host.pause_action.setEnabled(False)
+    menu.addAction("Finish", lambda: run("finish"))
+    menu.addAction("Open Houra", lambda: run("open"))
+    menu.addSeparator()
+    menu.addAction("Quit", app.quit)
+    tray.setContextMenu(menu)
+    tray.activated.connect(lambda reason: run("panel") if reason == QSystemTrayIcon.Trigger else None)
+    host.tray = tray
+    tray.show()
+
+    if cmd:
+        QTimer.singleShot(0, lambda: run(cmd, arg))
+    rc = app.exec()
+    host.setDoNotDisturb(False)
+    del engine  # destroy QML before Host so bindings never see a null Host
+    return rc
