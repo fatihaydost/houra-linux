@@ -20,6 +20,9 @@ Scope {
     && !service.breakOverlayVisible
 
   readonly property string lang: service ? service.lang : "en"
+  // Paused cue shared by every counter style: pause glyph + dimmed time
+  readonly property bool paused: !!service && service.phase === "paused"
+  readonly property string clockShown: (paused ? "⏸ " : "") + (service ? service.clockText : "00:00")
   readonly property var tokens: service ? service.tokens : ({})
   property string fontFamily: Style.font.family
 
@@ -480,7 +483,8 @@ Scope {
               textFormat: Text.PlainText
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              text: root.service ? root.service.clockText : "50:00"
+              text: root.clockShown
+              opacity: root.paused ? 0.55 : 1
               font.family: "Monospace"
               font.pixelSize: 13
               font.weight: Font.Light
@@ -663,7 +667,8 @@ Scope {
             id: tagClockTxt
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            text: root.service ? root.service.clockText : "00:00"
+            text: root.clockShown
+            opacity: root.paused ? 0.55 : 1
             font.family: "Monospace"
             font.pixelSize: 22
             font.weight: Font.Light
@@ -750,7 +755,8 @@ Scope {
               id: stripClockTxt
               width: parent.width
               horizontalAlignment: root.onLeft ? Text.AlignLeft : Text.AlignRight
-              text: root.service ? root.service.clockText : "00:00"
+              text: root.clockShown
+              opacity: root.paused ? 0.55 : 1
               font.family: "Monospace"
               font.pixelSize: 14
               font.weight: Font.Normal
@@ -836,7 +842,10 @@ Scope {
             width: 68
             horizontalAlignment: Text.AlignRight
             anchors.verticalCenter: parent.verticalCenter
-            text: root.service ? root.service.clockText : "00:00"
+            fontSizeMode: Text.HorizontalFit
+            minimumPixelSize: 12
+            text: root.clockShown
+            opacity: root.paused ? 0.55 : 1
             font.family: "Monospace"
             font.pixelSize: 21
             font.weight: Font.Light
@@ -975,7 +984,8 @@ Scope {
               Text {
                 textFormat: Text.PlainText
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: root.service ? root.service.clockText : "00:00"
+                text: root.clockShown
+                opacity: root.paused ? 0.55 : 1
                 font.family: "Monospace"
                 font.pixelSize: 32
                 font.weight: Font.ExtraLight
@@ -1054,7 +1064,8 @@ Scope {
         Text {
           textFormat: Text.PlainText
           anchors.centerIn: parent
-          text: root.service ? root.service.clockText : "00:00"
+          text: root.clockShown
+          opacity: root.paused ? 0.55 : 1
           font.family: "Monospace"
           font.pixelSize: 14
           font.weight: Font.Medium
