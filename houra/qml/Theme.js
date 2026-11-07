@@ -105,15 +105,6 @@ function formatMinutes(totalMins, lang) {
   return h + " " + t(lang, "sa", "h") + " " + remPad + " " + t(lang, "dk", "min")
 }
 
-function formatMinutesShort(totalMins, lang) {
-  var m = Math.max(0, Math.floor(Number(totalMins) || 0))
-  var h = Math.floor(m / 60)
-  var rem = m % 60
-  if (h === 0) return m + t(lang, "d", "m")
-  var remPad = rem < 10 ? ("0" + rem) : String(rem)
-  return h + t(lang, "s", "h") + " " + remPad + t(lang, "d", "m")
-}
-
 function formatRhythm(workMin, restMin, lang) {
   var w = Number(workMin) || 0
   var r = Number(restMin) || 0

@@ -661,7 +661,7 @@ Item {
                       anchors.verticalCenter: parent.verticalCenter
                       width: 62
                       horizontalAlignment: Text.AlignRight
-                      text: Theme.formatMinutesShort(s.focusMinutes || 0, root.lang)
+                      text: Theme.formatMinutes(s.focusMinutes || 0, root.lang)
                       font.family: "Monospace"
                       font.pixelSize: 12
                       font.weight: Font.DemiBold

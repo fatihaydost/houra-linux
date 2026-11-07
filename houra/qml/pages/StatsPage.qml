@@ -1000,7 +1000,10 @@ Item {
                     Text {
                       textFormat: Text.PlainText
                       visible: mins > 0
-                      text: Theme.formatMinutesShort(mins, root.lang)
+                      text: Theme.formatMinutes(mins, root.lang)
+                      width: parent.width
+                      fontSizeMode: Text.HorizontalFit
+                      minimumPixelSize: 8
                       font.family: "Monospace"
                       font.pixelSize: 12
                       font.weight: Font.DemiBold
@@ -1410,7 +1413,7 @@ Item {
                 Rectangle {
                   id: rowTrack
                   x: 64
-                  width: parent.width - 128
+                  width: parent.width - 146
                   height: 15
                   anchors.verticalCenter: parent.verticalCenter
                   radius: 4
@@ -1439,10 +1442,10 @@ Item {
                 Text {
                   textFormat: Text.PlainText
                   anchors.right: parent.right
-                  width: 58
+                  width: 76
                   horizontalAlignment: Text.AlignRight
                   anchors.verticalCenter: parent.verticalCenter
-                  text: rowMins > 0 ? Theme.formatMinutesShort(rowMins, root.lang) : "—"
+                  text: rowMins > 0 ? Theme.formatMinutes(rowMins, root.lang) : "—"
                   font.family: "Monospace"
                   font.pixelSize: 10
                   color: rowMins > 0 ? (root.tokens.secondary || "#bbbbbb") : (root.tokens.faint || "#555555")

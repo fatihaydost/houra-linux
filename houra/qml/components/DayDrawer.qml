@@ -225,7 +225,7 @@ Item {
             }
             Text {
               textFormat: Text.PlainText
-              text: seg.categoryName + " · " + Theme.formatMinutesShort(seg.minutes || 0, root.lang)
+              text: seg.categoryName + " · " + Theme.formatMinutes(seg.minutes || 0, root.lang)
               font.family: root.fontFamily
               font.pixelSize: 11
               color: root.tokens.secondary || "#bbbbbb"
@@ -329,7 +329,7 @@ Item {
                       text: {
                         var base = Theme.formatHM(s.start) + " – " + Theme.formatHM(s.end)
                         if (s.rhythmLabel) base += " · " + s.rhythmLabel
-                        base += " · " + Theme.formatMinutesShort(s.focusMinutes || 0, root.lang)
+                        base += " · " + Theme.formatMinutes(s.focusMinutes || 0, root.lang)
                         return base
                       }
                       font.family: "Monospace"
