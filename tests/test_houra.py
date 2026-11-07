@@ -197,6 +197,13 @@ class HouraTests(unittest.TestCase):
                         missing.append(f"{path.relative_to(ROOT)}:{i + 1}")
         self.assertEqual(missing, [], "Text items without textFormat PlainText")
 
+    def test_add_todo_literal_keeps_shorthand_text(self) -> None:
+        # Weekly-note copies must keep their title so the "already copied" check matches.
+        parsed = self.rpc("add-todo", {"title": "p1 Report @14:30"})
+        self.assertIn("Report", [t["title"] for t in parsed["today"]["todos"]])
+        kept = self.rpc("add-todo", {"title": "p1 Report @14:30", "literal": True})
+        self.assertIn("p1 Report @14:30", [t["title"] for t in kept["today"]["todos"]])
+
     def test_update_session_retags_past_session(self) -> None:
         import sqlite3
         self.rpc("snapshot")

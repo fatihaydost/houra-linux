@@ -425,7 +425,7 @@ Item {
   // Local todo only: the weekly Markdown file is never written.
   function copyWeeklyTaskToToday(wt) {
     if (!wt || weeklyTaskCopied(wt)) return
-    addTodo(String(wt.title || ""), "", { categoryId: Number(wt.categoryId) || 0 })
+    addTodo(String(wt.title || ""), "", { categoryId: Number(wt.categoryId) || 0, literal: true })
   }
 
   function importTodoistTaskToToday(td) {
@@ -827,6 +827,7 @@ Item {
     if (extra.recurrence !== undefined) p.recurrence = String(extra.recurrence || "")
     if (extra.categoryId !== undefined) p.categoryId = Number(extra.categoryId) || 0
     if (extra.todoistId !== undefined) p.todoistId = String(extra.todoistId || "")
+    if (extra.literal) p.literal = true
     enqueueRpc("add-todo", _withQueryFilters(p), null)
   }
 

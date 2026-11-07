@@ -2781,7 +2781,10 @@ def handle_command(cmd: str, payload: dict[str, Any]) -> dict[str, Any]:
 
         if cmd == "add-todo":
             raw_title = str(payload.get("title") or "").strip()
-            clean_title, sh_prio, sh_time = _extract_task_shorthands(raw_title)
+            if payload.get("literal"):  # copied text (weekly note): keep the title as written
+                clean_title, sh_prio, sh_time = raw_title, None, ""
+            else:
+                clean_title, sh_prio, sh_time = _extract_task_shorthands(raw_title)
             detail = str(payload.get("detail") or "").strip()
             td_id = str(payload.get("todoistId") or "").strip()
             prio = (
