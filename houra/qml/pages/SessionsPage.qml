@@ -717,7 +717,7 @@ Item {
                         id: delSessionLbl
                         anchors.centerIn: parent
                         text: parent.confirming
-                          ? Theme.t(root.lang, "Silinsin mi?", "Confirm?")
+                          ? Theme.t(root.lang, "Silinsin mi?", "Delete?")
                           : Theme.t(root.lang, "Sil", "Delete")
                         font.family: root.fontFamily
                         font.pixelSize: 10

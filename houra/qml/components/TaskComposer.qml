@@ -254,6 +254,8 @@ Column {
         : (root.tokens.line || Qt.rgba(1, 1, 1, 0.08))
 
       TextInput {
+        selectionColor: root.tokens.primaryBg || "#4c8df0"
+        selectedTextColor: root.tokens.primaryInk || "#ffffff"
         id: titleInput
         anchors.fill: parent
         anchors.leftMargin: 10
@@ -297,6 +299,8 @@ Column {
         : (root.tokens.line || Qt.rgba(1, 1, 1, 0.08))
 
       TextInput {
+        selectionColor: root.tokens.primaryBg || "#4c8df0"
+        selectedTextColor: root.tokens.primaryInk || "#ffffff"
         id: detailInput
         anchors.fill: parent
         anchors.leftMargin: 9

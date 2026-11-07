@@ -438,6 +438,8 @@ Rectangle {
           : (root.tokens.line || Qt.rgba(1, 1, 1, 0.08))
 
         TextInput {
+          selectionColor: root.tokens.primaryBg || "#4c8df0"
+          selectedTextColor: root.tokens.primaryInk || "#ffffff"
           id: titleInput
           anchors.fill: parent
           anchors.leftMargin: 8
@@ -511,6 +513,8 @@ Rectangle {
       TextEdit {
         id: detailInput
         textFormat: Text.PlainText
+        selectionColor: root.tokens.primaryBg || "#4c8df0"
+        selectedTextColor: root.tokens.primaryInk || "#ffffff"
         anchors.fill: parent
         anchors.margins: 5
         anchors.leftMargin: 8
@@ -924,6 +928,8 @@ Rectangle {
           : (root.tokens.line || Qt.rgba(1, 1, 1, 0.08))
 
         TextInput {
+          selectionColor: root.tokens.primaryBg || "#4c8df0"
+          selectedTextColor: root.tokens.primaryInk || "#ffffff"
           id: timeInput
           anchors.fill: parent
           anchors.leftMargin: 8

@@ -1053,9 +1053,9 @@ Item {
           Flickable {
             visible: root.spanDays > 42
             width: parent.width
-            height: 122
+            height: 136
             contentWidth: Math.max(width, heatRow.implicitWidth)
-            contentHeight: 122
+            contentHeight: 136
             clip: true
 
             Row {
@@ -1067,6 +1067,21 @@ Item {
                 delegate: Column {
                   readonly property var wk: root.heatmapWeeks[index]
                   spacing: 3
+
+                  // Month label over the first week column of each month
+                  Text {
+                    textFormat: Text.PlainText
+                    height: 11
+                    text: {
+                      var mOf = function(w) { for (var i = 0; i < 7; i++) if (w[i]) return Theme.parseIsoDay(w[i].day).getMonth(); return -1 }
+                      var m = mOf(wk)
+                      if (m < 0 || (index > 0 && mOf(root.heatmapWeeks[index - 1]) === m)) return ""
+                      return Theme.monthShort(m + 1, root.lang)
+                    }
+                    font.family: root.fontFamily
+                    font.pixelSize: 9
+                    color: root.tokens.muted || "#888888"
+                  }
 
                   Repeater {
                     model: 7

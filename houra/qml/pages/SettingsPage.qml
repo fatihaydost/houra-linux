@@ -128,7 +128,7 @@ Item {
   function _collect(item, out) {
     if (!item || !item.visible) return
     var tag = item.objectName
-    if ((tag === "kb" || tag === "kbSeg" || tag === "kbText") && item.width > 0 && (tag === "kbText" || item.enabled)) out.push(item)
+    if ((tag === "kb" || tag === "kbSeg" || tag === "kbText") && item.width > 0 && item.enabled) out.push(item)
     for (var i = 0; i < item.children.length; i++) _collect(item.children[i], out)
   }
 
@@ -742,6 +742,8 @@ Item {
             }
 
             TextInput {
+              selectionColor: root.tokens.primaryBg || "#4c8df0"
+              selectedTextColor: root.tokens.primaryInk || "#ffffff"
               id: weeklyInput
               objectName: "kbText"
               anchors.fill: parent
@@ -1076,6 +1078,8 @@ Item {
               }
 
               TextInput {
+                selectionColor: root.tokens.primaryBg || "#4c8df0"
+                selectedTextColor: root.tokens.primaryInk || "#ffffff"
                 id: tdTokenInput
                 objectName: "kbText"
                 anchors.left: parent.left
@@ -1245,9 +1249,11 @@ Item {
 
           Rectangle { width: parent.width; height: 1; color: root.tokens.line || Qt.rgba(1, 1, 1, 0.08) }
 
-          // Filter presets + custom Todoist query + Sync Now
+          // Filter presets + custom Todoist query + Sync Now (inert until Todoist is connected)
           Column {
             width: parent.width
+            enabled: !!root.todoist.hasToken && !!root.settings.todoistOn
+            opacity: enabled ? 1 : 0.4
             spacing: 8
 
             Item {
@@ -1337,6 +1343,8 @@ Item {
                 }
 
                 TextInput {
+                  selectionColor: root.tokens.primaryBg || "#4c8df0"
+                  selectedTextColor: root.tokens.primaryInk || "#ffffff"
                   id: todoistFilterInput
                   objectName: "kbText"
                   anchors.fill: parent
@@ -1459,6 +1467,8 @@ Item {
             border.color: root.tokens.line || Qt.rgba(1, 1, 1, 0.08)
 
             TextInput {
+              selectionColor: root.tokens.primaryBg || "#4c8df0"
+              selectedTextColor: root.tokens.primaryInk || "#ffffff"
               id: dbPathInput
               objectName: "kbText"
               anchors.fill: parent

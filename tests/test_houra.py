@@ -272,6 +272,16 @@ class HouraTests(unittest.TestCase):
                         missing.append(f"{path.relative_to(ROOT)}:{i + 1}")
         self.assertEqual(missing, [], "Text items without textFormat PlainText")
 
+    def test_text_inputs_use_theme_selection_colors(self) -> None:
+        # Qt's default navy selection ignores the theme
+        missing = []
+        for path in sorted(ROOT.rglob("*.qml")):
+            lines = path.read_text().split("\n")
+            for i, line in enumerate(lines):
+                if re.search(r"^\s*(TextInput|TextEdit) \{", line) and "selectionColor" not in "".join(lines[i + 1:i + 5]):
+                    missing.append(f"{path.relative_to(ROOT)}:{i + 1}")
+        self.assertEqual(missing, [], "Text inputs without theme selectionColor")
+
     def test_add_todo_literal_keeps_shorthand_text(self) -> None:
         # Weekly-note copies must keep their title so the "already copied" check matches.
         parsed = self.rpc("add-todo", {"title": "p1 Report @14:30"})

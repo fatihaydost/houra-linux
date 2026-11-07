@@ -356,8 +356,8 @@ Item {
                         id: drawerDelLbl
                         anchors.centerIn: parent
                         text: confirming
-                          ? Theme.t(root.lang, "Sil?", "Sure?")
-                          : Theme.t(root.lang, "Sil", "Del")
+                          ? Theme.t(root.lang, "Silinsin mi?", "Delete?")
+                          : Theme.t(root.lang, "Sil", "Delete")
                         font.family: root.fontFamily
                         font.pixelSize: 9
                         font.weight: confirming ? Font.DemiBold : Font.Normal

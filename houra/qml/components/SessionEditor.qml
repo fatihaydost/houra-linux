@@ -139,6 +139,8 @@ Column {
     border.color: goalInput.activeFocus ? (root.tokens.accent || Qt.rgba(1, 1, 1, 0.30)) : (root.tokens.line || Qt.rgba(1, 1, 1, 0.08))
 
     TextInput {
+      selectionColor: root.tokens.primaryBg || "#4c8df0"
+      selectedTextColor: root.tokens.primaryInk || "#ffffff"
       id: goalInput
       anchors.fill: parent
       anchors.leftMargin: 10
@@ -180,6 +182,8 @@ Column {
     TextEdit {
       id: noteInput
       textFormat: TextEdit.PlainText
+      selectionColor: root.tokens.primaryBg || "#4c8df0"
+      selectedTextColor: root.tokens.primaryInk || "#ffffff"
       anchors.fill: parent
       anchors.margins: 8
       wrapMode: TextEdit.Wrap

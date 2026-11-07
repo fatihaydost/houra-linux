@@ -773,6 +773,8 @@ Item {
 
             TextEdit {
               textFormat: TextEdit.PlainText
+              selectionColor: root.tokens.primaryBg || "#4c8df0"
+              selectedTextColor: root.tokens.primaryInk || "#ffffff"
               id: noteField
               width: noteFlick.width
               height: Math.max(noteFlick.height, contentHeight)

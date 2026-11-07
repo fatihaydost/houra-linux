@@ -360,6 +360,8 @@ Item {
           border.color: root.tokens.lineStrong || Qt.rgba(1, 1, 1, 0.16)
 
           TextInput {
+            selectionColor: root.tokens.primaryBg || "#4c8df0"
+            selectedTextColor: root.tokens.primaryInk || "#ffffff"
             id: nameInput
             anchors.fill: parent
             anchors.leftMargin: 8
@@ -512,6 +514,8 @@ Item {
             border.color: root.tokens.line || Qt.rgba(1, 1, 1, 0.1)
 
             TextInput {
+              selectionColor: root.tokens.primaryBg || "#4c8df0"
+              selectedTextColor: root.tokens.primaryInk || "#ffffff"
               id: hexInput
               anchors.fill: parent
               anchors.leftMargin: 8
@@ -635,6 +639,8 @@ Item {
           }
 
           TextInput {
+            selectionColor: root.tokens.primaryBg || "#4c8df0"
+            selectedTextColor: root.tokens.primaryInk || "#ffffff"
             id: searchField
             anchors.fill: parent
             anchors.leftMargin: 10
@@ -809,6 +815,8 @@ Item {
               }
 
               TextInput {
+                selectionColor: root.tokens.primaryBg || "#4c8df0"
+                selectedTextColor: root.tokens.primaryInk || "#ffffff"
                 id: iconHexInput
                 anchors.fill: parent
                 anchors.leftMargin: 6
@@ -873,6 +881,8 @@ Item {
           }
 
           TextInput {
+            selectionColor: root.tokens.primaryBg || "#4c8df0"
+            selectedTextColor: root.tokens.primaryInk || "#ffffff"
             id: emojiInput
             anchors.fill: parent
             anchors.leftMargin: 10

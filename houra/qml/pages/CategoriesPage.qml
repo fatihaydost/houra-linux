@@ -372,6 +372,8 @@ Item {
 
               // Inline editable name
               TextInput {
+                selectionColor: root.tokens.primaryBg || "#4c8df0"
+                selectedTextColor: root.tokens.primaryInk || "#ffffff"
                 id: nameInput
                 anchors.left: swatchBtn.right
                 anchors.leftMargin: 14
