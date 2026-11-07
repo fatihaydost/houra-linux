@@ -1,0 +1,3 @@
+module Houra.Shell
+LayerWindow 1.0 LayerWindow.qml
+Scope 1.0 Scope.qml
