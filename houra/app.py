@@ -26,6 +26,8 @@ COMMANDS = {
     "newSession", "panel", "open", "stats", "tab", "close", "toggle", "pause", "finish",
     "closeSession", "cancel", "syncTodoist", "style", "status",
 }
+# Only these may start the app when no instance is running; the rest act on a live one.
+LAUNCH_COMMANDS = {"", "open", "newSession", "panel", "stats", "tab"}
 
 
 class _Call(QRunnable):
@@ -263,19 +265,23 @@ def main(argv: list[str] | None = None) -> int:
         if reply and (cmd == "status" or reply.startswith("unknown")):
             print(reply)
         return 0
-
-    host = Host()
-    engine = _make_engine(app, host, _layer_shell_available(QQmlApplicationEngine()))
-    engine.load(QUrl.fromLocalFile(str(QML_DIR / "Service.qml")))
-    if not engine.rootObjects():
+    if cmd not in LAUNCH_COMMANDS:
+        print("Houra is not running", file=sys.stderr)
         return 1
-    root = engine.rootObjects()[0]
-    run = lambda c, a="": _invoke(root, c, a)  # noqa: E731
 
+    # Listen before the slow QML load so a second `houra ...` during startup finds
+    # this instance instead of launching another one; requests wait in `queued`.
     QLocalServer.removeServer(APP_ID)
     server = QLocalServer(app)
     server.setSocketOptions(QLocalServer.UserAccessOption)
     server.listen(APP_ID)
+    state: dict = {"root": None, "queued": []}
+
+    def run(c: str, a: str = "") -> str:
+        if state["root"] is None:
+            state["queued"].append((c, a))
+            return "starting"
+        return _invoke(state["root"], c, a)
 
     def on_conn():
         sock = server.nextPendingConnection()
@@ -297,6 +303,15 @@ def main(argv: list[str] | None = None) -> int:
         on_read()  # the request may already be buffered
 
     server.newConnection.connect(on_conn)
+
+    host = Host()
+    engine = _make_engine(app, host, _layer_shell_available(QQmlApplicationEngine()))
+    engine.load(QUrl.fromLocalFile(str(QML_DIR / "Service.qml")))
+    if not engine.rootObjects():
+        return 1
+    state["root"] = engine.rootObjects()[0]
+    for c, a in state["queued"]:
+        QTimer.singleShot(0, lambda c=c, a=a: run(c, a))
 
     tray = QSystemTrayIcon(QIcon(str(ICON_PATH)), app)
     tray.setToolTip("Houra")
