@@ -18,7 +18,7 @@ Scope {
     visible: on
     anchors.fill: parent
     anchors.margins: -3
-    radius: (parent && parent.radius ? parent.radius : 4) + 3
+    radius: ((parent as Rectangle)?.radius ?? 4) + 3
     color: "transparent"
     border.width: 2
     border.color: root.tokens.accent || root.tokens.ink || "#ffffff"
@@ -940,6 +940,8 @@ Scope {
                 }
 
                 TextInput {
+                  selectionColor: root.tokens.primaryBg || "#4c8df0"
+                  selectedTextColor: root.tokens.primaryInk || "#ffffff"
                   id: goalField
                   anchors.fill: parent
                   verticalAlignment: TextInput.AlignVCenter
@@ -1519,6 +1521,8 @@ Scope {
                   }
 
                   TextInput {
+                    selectionColor: root.tokens.primaryBg || "#4c8df0"
+                    selectedTextColor: root.tokens.primaryInk || "#ffffff"
                     id: newTaskTitle
                     anchors.fill: parent
                     anchors.leftMargin: 10
@@ -1557,6 +1561,8 @@ Scope {
                   }
 
                   TextInput {
+                    selectionColor: root.tokens.primaryBg || "#4c8df0"
+                    selectedTextColor: root.tokens.primaryInk || "#ffffff"
                     id: newTaskDetail
                     anchors.fill: parent
                     anchors.leftMargin: 10
@@ -1894,6 +1900,8 @@ Scope {
                         KbRing { on: customWorkInput.activeFocus }
 
                         TextInput {
+                          selectionColor: root.tokens.primaryBg || "#4c8df0"
+                          selectedTextColor: root.tokens.primaryInk || "#ffffff"
                           id: customWorkInput
                           anchors.fill: parent
                           horizontalAlignment: TextInput.AlignHCenter
@@ -1978,6 +1986,8 @@ Scope {
                         KbRing { on: customRestInput.activeFocus }
 
                         TextInput {
+                          selectionColor: root.tokens.primaryBg || "#4c8df0"
+                          selectedTextColor: root.tokens.primaryInk || "#ffffff"
                           id: customRestInput
                           anchors.fill: parent
                           horizontalAlignment: TextInput.AlignHCenter
