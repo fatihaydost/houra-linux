@@ -14,13 +14,16 @@ Rectangle {
 
   readonly property string svgPath: IconData.pathFor(iconName)
   readonly property color resolvedGlyphColor: iconColor !== "" ? iconColor : Theme.inkOn(swatchColor)
-  readonly property real glyphDim: Math.round(swatchSize * 0.60)
+  // A glyph under ~12 px is an unreadable speck: swatches that show one never go below 16 px
+  readonly property bool hasGlyph: emoji !== "" || svgPath !== ""
+  readonly property int boxSize: hasGlyph ? Math.max(16, swatchSize) : swatchSize
+  readonly property real glyphDim: Math.max(12, Math.round(boxSize * 0.60))
 
-  implicitWidth: swatchSize
-  implicitHeight: swatchSize
-  width: swatchSize
-  height: swatchSize
-  radius: Math.max(3, Math.round(swatchSize * 0.32))
+  implicitWidth: boxSize
+  implicitHeight: boxSize
+  width: boxSize
+  height: boxSize
+  radius: Math.max(3, Math.round(boxSize * 0.32))
   color: swatchColor || "#4c8df0"
 
   Text {
@@ -28,7 +31,7 @@ Rectangle {
     anchors.centerIn: parent
     visible: root.emoji !== ""
     text: root.emoji
-    font.pixelSize: Math.max(8, Math.round(root.swatchSize * 0.56))
+    font.pixelSize: Math.max(11, Math.round(root.boxSize * 0.56))
     horizontalAlignment: Text.AlignHCenter
     verticalAlignment: Text.AlignVCenter
   }
