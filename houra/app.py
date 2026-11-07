@@ -11,7 +11,7 @@ from PySide6.QtCore import (
     Q_RETURN_ARG, Qt, Signal, Slot, qInstallMessageHandler, QtMsgType,
 )
 from PySide6.QtDBus import QDBusConnection, QDBusInterface
-from PySide6.QtGui import QAction, QGuiApplication, QIcon, QRegion
+from PySide6.QtGui import QGuiApplication, QIcon, QRegion
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
@@ -59,7 +59,6 @@ class Host(QObject):
         self._sound = None
         self._dnd_cookie = 0
         self.tray: QSystemTrayIcon | None = None
-        self.pause_action: QAction | None = None
         self._notif = QDBusInterface(
             "org.freedesktop.Notifications", "/org/freedesktop/Notifications",
             "org.freedesktop.Notifications", QDBusConnection.sessionBus(),
@@ -150,9 +149,6 @@ class Host(QObject):
     def setTrayStatus(self, title: str, tooltip: str, phase: str) -> None:
         if self.tray:
             self.tray.setToolTip(tooltip or title)
-        if self.pause_action:
-            self.pause_action.setText("Resume" if phase == "paused" else "Pause")
-            self.pause_action.setEnabled(phase in ("focus", "paused"))
 
 
 def _send_to_running(cmd: str, arg: str) -> str | None:
@@ -316,13 +312,39 @@ def main(argv: list[str] | None = None) -> int:
     tray = QSystemTrayIcon(QIcon(str(ICON_PATH)), app)
     tray.setToolTip("Houra")
     menu = QMenu()
-    menu.addAction("New session", lambda: run("newSession"))
-    host.pause_action = menu.addAction("Pause", lambda: run("pause"))
-    host.pause_action.setEnabled(False)
-    menu.addAction("Finish", lambda: run("finish"))
-    menu.addAction("Open Houra", lambda: run("open"))
-    menu.addSeparator()
-    menu.addAction("Quit", app.quit)
+    root = state["root"]
+
+    def tray_action(key: str) -> None:
+        if key == "quit":
+            app.quit()
+        else:
+            QMetaObject.invokeMethod(root, "trayAction", Qt.DirectConnection, Q_ARG("QVariant", key))
+
+    def fill(target: QMenu, entries) -> None:
+        for e in entries or []:
+            if e.get("separator"):
+                target.addSeparator()
+            elif e.get("children"):
+                fill(target.addMenu(str(e.get("label", ""))), e["children"])
+            else:
+                act = target.addAction(str(e.get("label", "")))
+                act.setEnabled(bool(e.get("enabled", True)))
+                if e.get("checked") is not None:
+                    act.setCheckable(True)
+                    act.setChecked(bool(e["checked"]))
+                key = str(e.get("key", ""))
+                act.triggered.connect(lambda _=False, k=key: tray_action(k))
+
+    def rebuild() -> None:
+        entries = QMetaObject.invokeMethod(root, "trayMenu", Qt.DirectConnection, Q_RETURN_ARG("QVariant"))
+        if hasattr(entries, "toVariant"):  # a JS array arrives as QJSValue
+            entries = entries.toVariant()
+        menu.clear()
+        fill(menu, entries)
+
+    # Rebuilt on open so the clock, phase and chosen counter style are current.
+    menu.aboutToShow.connect(rebuild)
+    rebuild()
     tray.setContextMenu(menu)
     tray.activated.connect(lambda reason: run("panel") if reason == QSystemTrayIcon.Trigger else None)
     host.tray = tray

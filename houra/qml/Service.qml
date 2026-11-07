@@ -923,6 +923,82 @@ Item {
     })
   }
 
+  // --- Tray menu: the old bar popout's actions as a native menu model ---
+  // Entry: { key, label, enabled?, checked?, children? } or { separator: true }; Python renders it.
+  function trayMenu() {
+    var L = lang
+    var items = []
+    var sep = function() { items.push({ separator: true }) }
+    var td = todayData || {}
+    items.push({ key: "", enabled: false,
+      label: Theme.t(L, "Bugün ", "Today ") + Theme.formatMinutes(td.focusMinutes || 0, L) + Theme.t(L, " odak", " focused")
+        + " · " + (td.sessionsCount || 0) + " " + Theme.t(L, "oturum", "sessions") })
+    sep()
+    if (phase === "idle") {
+      items.push({ key: "start", label: Theme.t(L, "Oturum başlat…", "Start session…") })
+      var reps = td.recentRepeats || []
+      if (reps.length > 0) {
+        var kids = []
+        for (var i = 0; i < reps.length; i++) {
+          var r = reps[i]
+          kids.push({ key: "rep:" + i, label: (r.goal ? (r.categoryName + " · " + r.goal) : r.categoryName)
+            + " (" + (r.rhythmLabel || Theme.formatRhythm(r.workMin, r.restMin, L)) + ")" })
+        }
+        items.push({ label: Theme.t(L, "Son oturumu tekrarla", "Repeat a recent session"), children: kids })
+      }
+    } else if (phase === "focus" || phase === "paused") {
+      items.push({ key: "", enabled: false, label: workMinutes <= 0
+        ? Theme.t(L, "serbest · ", "free · ") + clockText
+        : clockText + " " + Theme.t(L, "kaldı", "left") })
+      var stds = sessionTodos || []
+      for (var t = 0; t < stds.length; t++)
+        items.push({ key: "todo:" + stds[t].id, label: Theme.todoEmoji(Number(stds[t].state)) + " " + stds[t].title })
+      items.push({ key: "pause", label: phase === "paused" ? Theme.t(L, "Devam et", "Resume") : Theme.t(L, "Duraklat", "Pause") })
+      items.push({ key: "finish", label: Theme.t(L, "Oturumu bitir", "Finish session") })
+      items.push({ key: "closeNoBreak", label: Theme.t(L, "Molasız kapat (kaydet)", "Close & save") })
+      // Submenu instead of the popout's two-step confirm: one stray click can't discard a session.
+      items.push({ label: Theme.t(L, "İptal et (kaydetme)", "Cancel (no save)"),
+        children: [{ key: "cancel", label: Theme.t(L, "Kaydetmeden iptal et", "Discard session") }] })
+    } else if (phase === "rest") {
+      items.push({ key: "", enabled: false, label: Theme.t(L, "Mola · ", "Break · ") + restClockText })
+      items.push({ key: "backToBreak", label: Theme.t(L, "Molaya geri dön", "Back to break") })
+      items.push({ key: "endBreakNew", label: Theme.t(L, "Molayı bitir, yeni oturum…", "End break, new session…") })
+    }
+    sep()
+    var styles = [
+      ["tag", Theme.t(L, "Etiket", "Tag")], ["strip", Theme.t(L, "İnce şerit", "Thin strip")],
+      ["capsule", Theme.t(L, "Kapsül", "Capsule")], ["card", Theme.t(L, "Kart", "Card")],
+      ["ring", Theme.t(L, "Halka", "Ring")], ["none", Theme.t(L, "Hiçbiri", "None")]]
+    var sk = []
+    for (var s = 0; s < styles.length; s++)
+      sk.push({ key: "style:" + styles[s][0], label: styles[s][1], checked: widgetStyle === styles[s][0] })
+    items.push({ label: Theme.t(L, "Ekranda göster", "Show on screen"), children: sk })
+    sep()
+    items.push({ key: "nav:", label: Theme.t(L, "Paneli aç…", "Open panel…") })
+    items.push({ key: "nav:stats", label: Theme.t(L, "İstatistikler…", "Statistics…") })
+    items.push({ key: "nav:settings", label: Theme.t(L, "Ayarlar…", "Settings…") })
+    sep()
+    items.push({ key: "quit", label: Theme.t(L, "Çık", "Quit") })
+    return items
+  }
+
+  function trayAction(key) {
+    key = String(key)
+    if (key === "start") openNewSession(0, "")
+    else if (key.indexOf("rep:") === 0) {
+      var r = ((todayData || {}).recentRepeats || [])[Number(key.slice(4))]
+      if (r) quickStartSession(r.categoryId, r.goal, r.workMin, r.restMin)
+    } else if (key.indexOf("todo:") === 0) cycleTodoState(Number(key.slice(5)))
+    else if (key === "pause") togglePause()
+    else if (key === "finish") finishSession()
+    else if (key === "closeNoBreak") closeSessionWithoutBreak()
+    else if (key === "cancel") cancelSession()
+    else if (key === "backToBreak") returnToBreak()
+    else if (key === "endBreakNew") endBreakAndStartNew()
+    else if (key.indexOf("style:") === 0) setWidgetStyle(key.slice(6))
+    else if (key.indexOf("nav:") === 0) openMainPanel(key.slice(4))
+  }
+
   // --- IPC / tray commands (`houra <command> [arg]`), called by Host ---
   function ipc(name, arg) {
     switch (String(name)) {
