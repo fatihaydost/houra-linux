@@ -272,6 +272,10 @@ class HouraTests(unittest.TestCase):
                         missing.append(f"{path.relative_to(ROOT)}:{i + 1}")
         self.assertEqual(missing, [], "Text items without textFormat PlainText")
 
+    def test_tab_command_rejects_unknown_names(self) -> None:
+        from houra import app
+        self.assertEqual(app.main(["houra", "tab", "bogus"]), 2)
+
     def test_text_inputs_use_theme_selection_colors(self) -> None:
         # Qt's default navy selection ignores the theme
         missing = []

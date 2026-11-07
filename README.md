@@ -21,22 +21,35 @@ with the original SQLite schema.
   GNOME and X11 get a plain always-on-top window instead.
 - Optional: Qt Multimedia for the chime, a StatusNotifierItem tray (KDE, Waybar, ...).
 
-## Run
+## Install and run
+
+From a clone of this repo:
 
 ```sh
-python3 -m houra            # start (or focus) Houra; lives in the tray
-python3 -m houra newSession # open the new-session window
+mkdir -p ~/.local/bin ~/.local/share/applications ~/.local/share/icons/hicolor/256x256/apps
+printf '#!/bin/sh\ncd %s && exec python3 -m houra "$@"\n' "$PWD" > ~/.local/bin/houra
+chmod +x ~/.local/bin/houra
+cp data/io.github.fatihaydost.Houra.desktop ~/.local/share/applications/
+python3 -c 'import sys; from PySide6.QtGui import QImage; from PySide6.QtCore import Qt; QImage(sys.argv[1]).scaled(256, 256, Qt.KeepAspectRatio, Qt.SmoothTransformation).save(sys.argv[2])' \
+  houra/assets/icon.png ~/.local/share/icons/hicolor/256x256/apps/io.github.fatihaydost.Houra.png
 ```
 
-Or install the `houra` command with `pip install --user --no-deps .` and copy
-`data/io.github.fatihaydost.Houra.desktop` to `~/.local/share/applications/`.
+`~/.local/bin` must be on your `PATH`. Then:
+
+```sh
+houra                # start (or focus) Houra; lives in the tray
+houra newSession     # open the new-session window
+houra --login on     # start at login (XDG autostart); `off` removes it, no argument prints the state
+```
+
+Without the launcher, `python3 -m houra ...` from the repo works the same way.
 
 ## Commands and global shortcuts
 
 A running instance accepts commands; bind them to global shortcuts in any desktop:
 
 ```
-houra newSession | panel | stats | tab <name> | close | toggle | pause | finish
+houra newSession | panel | stats | tab <today|stats|sessions|categories|settings> | close | toggle | pause | finish
       closeSession | cancel | syncTodoist | style <name> | status
 ```
 

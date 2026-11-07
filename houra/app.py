@@ -28,6 +28,7 @@ COMMANDS = {
     "newSession", "panel", "open", "stats", "tab", "close", "toggle", "pause", "finish",
     "closeSession", "cancel", "syncTodoist", "style", "status",
 }
+TABS = ("today", "stats", "sessions", "categories", "settings")
 # Only these may start the app when no instance is running; the rest act on a live one.
 LAUNCH_COMMANDS = {"", "open", "newSession", "panel", "stats", "tab"}
 
@@ -293,6 +294,9 @@ def main(argv: list[str] | None = None) -> int:
     arg = args[1] if len(args) > 1 else ""
     if cmd and cmd not in COMMANDS:
         print(f"usage: houra [{'|'.join(sorted(COMMANDS))}] [arg]", file=sys.stderr)
+        return 2
+    if cmd == "tab" and arg.strip().lower() not in ("", *TABS):
+        print(f"houra: unknown tab '{arg}' (use {'|'.join(TABS)})", file=sys.stderr)
         return 2
 
     QGuiApplication.setDesktopFileName(APP_ID)
