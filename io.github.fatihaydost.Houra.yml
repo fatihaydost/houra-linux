@@ -1,0 +1,47 @@
+id: io.github.fatihaydost.Houra
+runtime: org.kde.Platform
+runtime-version: '6.11'
+sdk: org.kde.Sdk
+base: io.qt.PySide.BaseApp
+base-version: '6.11'
+command: houra
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  - --socket=pulseaudio          # break chime
+  - --share=network              # Todoist
+  - --filesystem=home            # weekly to-do note in any vault, CSV export
+  - --filesystem=xdg-config/autostart:create
+  - --talk-name=org.freedesktop.Notifications   # do-not-disturb inhibit
+  - --talk-name=org.kde.StatusNotifierWatcher   # tray icon
+cleanup-commands:
+  - /app/cleanup-BaseApp.sh
+modules:
+  - name: layer-shell-qt
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_TESTING=OFF
+    sources:
+      - type: git
+        url: https://invent.kde.org/plasma/layer-shell-qt.git
+        tag: v6.8.2
+  - name: houra
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/share/houra
+      - cp -r houra /app/share/houra/
+      - find /app/share/houra -name __pycache__ -prune -exec rm -rf {} +
+      - install -Dm755 packaging/flatpak/houra.sh /app/bin/houra
+      - install -Dm644 data/io.github.fatihaydost.Houra.desktop -t /app/share/applications
+      - install -Dm644 packaging/flatpak/icon-256.png /app/share/icons/hicolor/256x256/apps/io.github.fatihaydost.Houra.png
+      - install -Dm644 packaging/flatpak/io.github.fatihaydost.Houra.metainfo.xml -t /app/share/metainfo
+    sources:
+      - type: dir
+        path: .
+        skip:
+          - .git
+          - build-dir
+          - .flatpak-builder

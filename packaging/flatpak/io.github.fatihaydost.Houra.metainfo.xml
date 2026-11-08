@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.fatihaydost.Houra</id>
+  <name>Houra</name>
+  <summary>Calm focus timer with an on-screen counter and breaks</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="io.github.fatihaydost">
+    <name>Fatih Aydost</name>
+  </developer>
+  <description>
+    <p>Houra keeps a small focus counter on screen, covers the screen for breaks and keeps local statistics. Sessions can be tied to Todoist tasks or a weekly Markdown to-do note.</p>
+  </description>
+  <launchable type="desktop-id">io.github.fatihaydost.Houra.desktop</launchable>
+  <url type="homepage">https://github.com/fatihaydost/houra-linux</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-11-08"/>
+  </releases>
+</component>

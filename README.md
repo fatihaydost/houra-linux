@@ -44,6 +44,30 @@ houra --login on     # start at login (XDG autostart); `off` removes it, no argu
 
 Without the launcher, `python3 -m houra ...` from the repo works the same way.
 
+## Flatpak
+
+The Flatpak bundles Qt 6.11, PySide6 and `layer-shell-qt`, so it does not depend on
+the distro's Qt packages. Build and install for the current user:
+
+```sh
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak-builder --user --install --force-clean --install-deps-from=flathub \
+  --state-dir ~/.cache/houra-fpbuild/state ~/.cache/houra-fpbuild/build io.github.fatihaydost.Houra.yml
+```
+
+Single-file bundle for another machine (`--repo` added to the build above):
+
+```sh
+flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
+  ~/.cache/houra-fpbuild/repo dist/houra.flatpak io.github.fatihaydost.Houra
+flatpak install --user dist/houra.flatpak
+```
+
+Commands become `flatpak run io.github.fatihaydost.Houra newSession` and so on. The
+Flatpak reads and writes the same files as the native install (see Data), so both
+share one history; run only one of them at a time. Keep the build directory off a
+tmpfs: `flatpak-builder` fails with "Can't migrate locale dirs" there.
+
 ## Commands and global shortcuts
 
 A running instance accepts commands; bind them to global shortcuts in any desktop:

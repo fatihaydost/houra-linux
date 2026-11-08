@@ -10,8 +10,12 @@ APP_ID = "io.github.fatihaydost.Houra"
 REPO_DIR = Path(__file__).resolve().parent.parent
 
 
+FLATPAK = bool(os.environ.get("FLATPAK_ID"))
+
+
 def desktop_path() -> Path:
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    # Inside Flatpak XDG_CONFIG_HOME is the sandbox's; the session reads the host ~/.config/autostart.
+    base = str(Path.home() / ".config") if FLATPAK else (os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config"))
     return Path(base) / "autostart" / f"{APP_ID}.desktop"
 
 
@@ -25,6 +29,8 @@ def _exec_arg(arg: str) -> str:
 
 def exec_line() -> tuple[str, str | None]:
     """(Exec value, working dir or None) matching how the user runs Houra now."""
+    if FLATPAK:
+        return f"flatpak run {os.environ['FLATPAK_ID']}", None
     found = shutil.which("houra")
     if found:  # absolute: the login session's PATH may lack ~/.local/bin
         return _exec_arg(found), None

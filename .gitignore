@@ -6,3 +6,6 @@ __pycache__/
 *.sqlite-wal
 *.sqlite-shm
 .DS_Store
+dist/
+.flatpak-builder/
+build-dir/

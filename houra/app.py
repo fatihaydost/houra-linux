@@ -77,6 +77,8 @@ class Host(QObject):
     @Slot(str, "QVariant", result=int)
     def call(self, cmd: str, payload) -> int:
         self._next_id += 1
+        if hasattr(payload, "toVariant"):  # PySide 6.11 (Flatpak runtime) hands JS objects over as QJSValue
+            payload = payload.toVariant()
         self._pool.start(_Call(self, self._next_id, cmd, payload if isinstance(payload, dict) else {}))
         return self._next_id
 
@@ -89,6 +91,8 @@ class Host(QObject):
             return
         region = QRegion()
         for r in rects:
+            if hasattr(r, "toVariant"):
+                r = r.toVariant()
             w, h = int(r.get("width", 0)), int(r.get("height", 0))
             if w > 0 and h > 0:
                 region = region.united(QRegion(QRect(int(r.get("x", 0)), int(r.get("y", 0)), w, h)))
@@ -190,9 +194,17 @@ def _flush_on_quit(host: Host, root: QObject) -> None:
             print(f"houra: quit flush {cmd} failed: {exc}", file=sys.stderr)
 
 
+def _server_name() -> str:
+    # Flatpak gives each instance its own /tmp; $XDG_RUNTIME_DIR/app/<id> is the shared one.
+    rt = os.environ.get("XDG_RUNTIME_DIR")
+    if os.environ.get("FLATPAK_ID") and rt:
+        return str(Path(rt, "app", os.environ["FLATPAK_ID"], "houra.sock"))
+    return APP_ID
+
+
 def _send_to_running(cmd: str, arg: str) -> str | None:
     sock = QLocalSocket()
-    sock.connectToServer(APP_ID)
+    sock.connectToServer(_server_name())
     if not sock.waitForConnected(500):
         return None
     sock.write((json.dumps([cmd, arg]) + "\n").encode())
@@ -317,10 +329,10 @@ def main(argv: list[str] | None = None) -> int:
 
     # Listen before the slow QML load so a second `houra ...` during startup finds
     # this instance instead of launching another one; requests wait in `queued`.
-    QLocalServer.removeServer(APP_ID)
+    QLocalServer.removeServer(_server_name())
     server = QLocalServer(app)
     server.setSocketOptions(QLocalServer.UserAccessOption)
-    if not server.listen(APP_ID):  # e.g. a TMPDIR long enough to pass the 108-byte socket path limit
+    if not server.listen(_server_name()):  # e.g. a TMPDIR long enough to pass the 108-byte socket path limit
         print(f"houra: commands disabled, cannot listen: {server.errorString()}", file=sys.stderr)
     state: dict = {"root": None, "queued": []}
 
