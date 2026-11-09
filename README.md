@@ -10,6 +10,9 @@ by Emirhan, the macOS version of Houra. This is a Linux port of it (by way of an
 Omarchy shell plugin); the app icon is the macOS original's. Data stays compatible
 with the original SQLite schema.
 
+> This repository used to be the Omarchy plugin. That plugin is no longer maintained; its last
+> state is on the [`omarchy`](https://github.com/fatihaydost/houra-linux/tree/omarchy) branch.
+
 ## Requirements
 
 - Python 3.11+
