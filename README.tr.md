@@ -33,14 +33,29 @@ Her şey makinende, tek bir SQLite dosyasında durur. Hesap ve izleme yok; Todoi
 
 ## Kurulum
 
-[Son sürümden](https://github.com/fatihaydost/houra-linux/releases/latest) `houra.flatpak` dosyasını indirin, sonra:
+Flatpak kendi Qt'sini getirir, dağıtımınızın paketlerine bağlı değildir.
+
+1. Flatpak yoksa kurun: `sudo apt install flatpak` (Debian, Ubuntu), `sudo dnf install flatpak` (Fedora), `sudo zypper install flatpak` (openSUSE) ya da `sudo pacman -S flatpak` (Arch).
+2. [Son sürümden](https://github.com/fatihaydost/houra-linux/releases/latest) `houra.flatpak` dosyasını indirin.
+3. Dosyayı kaydettiğiniz klasörde çalıştırın:
 
 ```sh
-flatpak install --user houra.flatpak
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak install --user ./houra.flatpak
 flatpak run io.github.fatihaydost.Houra
 ```
 
-Houra tepside yaşar. İlk açılışta masaüstü, yeni oturum (`Ctrl+Alt+N`) ve panel kısayollarını kaydetmek için onay ister.
+İlk kurulum KDE çalışma ortamını da indirir, yaklaşık 1 GB.
+
+Arch'ta yerel paket de derleyebilirsiniz:
+
+```sh
+git clone https://github.com/fatihaydost/houra-linux
+cd houra-linux/packaging/aur
+makepkg -si
+```
+
+Houra tepside yaşar. Masaüstünüzde tepsi yoksa (AppIndicator eklentisiz GNOME) açınca panel görünür, paneli geri getirmek için uygulamayı yeniden çalıştırın. Flatpak sürümü ilk açılışta yeni oturum (`Ctrl+Alt+N`) ve panel kısayollarını kaydetmek için masaüstünden onay ister.
 
 Haftalık notu nerede tutarsanız tutun okuyabilmesi için Flatpak ev klasörünüze erişir. Kaynaktan kurulan sürümle aynı veri dosyalarını kullanır ([Verileriniz](#verileriniz)), ikisini aynı anda çalıştırmayın.
 
@@ -48,9 +63,11 @@ Haftalık notu nerede tutarsanız tutun okuyabilmesi için Flatpak ev klasörün
 
 | Masaüstü | Ekran sayacı ve mola | Durum |
 |---|---|---|
-| KDE Plasma (Wayland) | Layer shell | Denendi |
-| Hyprland, Sway, niri, COSMIC | Layer shell | Çalışması bekleniyor, henüz denenmedi |
-| GNOME, X11 oturumları | Hep üstte duran düz pencere | Çalışması bekleniyor, henüz denenmedi |
+| KDE Plasma (Wayland) | Layer shell | Gerçek masaüstünde denendi |
+| Sway, niri, labwc | Layer shell | Başsız ortamda denendi |
+| X11 oturumları | Hep üstte duran düz pencere | Başsız ortamda denendi |
+| GNOME | Düz pencere | mutter altında açılıyor; sayaç ve molanın gerçek GNOME Shell'de nereye yerleştiği doğrulanmadı |
+| Hyprland, COSMIC | Layer shell | Henüz denenmedi |
 
 Tepsi için StatusNotifierItem desteği gerekir: KDE'de hazır, Waybar'da çalışır, GNOME'da AppIndicator eklentisi ister. *Odak sırasında Rahatsız Etme* için bildirimleri engelleyebilen bir sunucu gerekir (KDE); başka yerde bu ayar görünmez.
 
@@ -150,11 +167,19 @@ flatpak-builder --user --install --force-clean --install-deps-from=flathub \
   --state-dir ~/.cache/houra-fpbuild/state ~/.cache/houra-fpbuild/build io.github.fatihaydost.Houra.yml
 ```
 
-Derleme klasörünü tmpfs üstünde tutmayın, `flatpak-builder` orada "Can't migrate locale dirs" hatası verir. AUR tarifi [`packaging/aur`](packaging/aur) klasöründe.
+Derleme klasörünü tmpfs üstünde tutmayın, `flatpak-builder` orada "Can't migrate locale dirs" hatası verir. Paketlemeden çalıştırmak için Python 3.11+, **sistemin** PySide6 ve Qt 6 paketleri ve `layer-shell-qt` 6 gerekir. pip'teki PySide6 kendi Qt'sini getirdiği için sistemin layer-shell modülünü yükleyemez.
 
-Paketlemeden çalıştırmak için Python 3.11+, **sistemin** PySide6 ve Qt 6 paketleri (Arch: `pyside6`; Debian/Ubuntu: `python3-pyside6.*`; Fedora: `python3-pyside6`) ve `layer-shell-qt` 6 gerekir. pip'teki PySide6 kendi Qt'sini getirdiği için sistemin layer-shell modülünü yükleyemez.
+| Dağıtım | Paketler |
+|---|---|
+| Arch | `sudo pacman -S pyside6 layer-shell-qt` |
+| Fedora | `sudo dnf install python3-pyside6 layer-shell-qt` |
+| Debian 13, Ubuntu 26.04 | `sudo apt install python3-pyside6.qtcore python3-pyside6.qtdbus python3-pyside6.qtgui python3-pyside6.qtmultimedia python3-pyside6.qtnetwork python3-pyside6.qtqml python3-pyside6.qtquick python3-pyside6.qtwidgets layer-shell-qt qml6-module-org-kde-layershell qml6-module-qtquick qml6-module-qtqml qml6-module-qtquick-shapes qml6-module-qtquick-dialogs` |
+| openSUSE Tumbleweed | `sudo zypper install python313 python313-pyside6 layer-shell-qt6 layer-shell-qt6-imports` (addaki Python sürümü zamanla değişir) |
+| Ubuntu 24.04 ve eskisi | PySide6 paketi yok, Flatpak kullanın |
 
 ```sh
+git clone https://github.com/fatihaydost/houra-linux
+cd houra-linux
 python3 -m houra
 python3 -m houra --login on   # girişte başlat; `off` kaldırır
 ```

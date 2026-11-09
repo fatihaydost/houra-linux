@@ -33,14 +33,29 @@ Everything stays on your machine in a local SQLite file. There is no account and
 
 ## Install
 
-Download `houra.flatpak` from the [latest release](https://github.com/fatihaydost/houra-linux/releases/latest), then:
+The Flatpak carries its own Qt, so it does not depend on your distribution's packages.
+
+1. Install Flatpak if you don't have it: `sudo apt install flatpak` (Debian, Ubuntu), `sudo dnf install flatpak` (Fedora), `sudo zypper install flatpak` (openSUSE) or `sudo pacman -S flatpak` (Arch).
+2. Download `houra.flatpak` from the [latest release](https://github.com/fatihaydost/houra-linux/releases/latest).
+3. In the folder you saved it to, run:
 
 ```sh
-flatpak install --user houra.flatpak
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak install --user ./houra.flatpak
 flatpak run io.github.fatihaydost.Houra
 ```
 
-Houra lives in the tray. The first start asks your desktop to register global shortcuts for a new session (`Ctrl+Alt+N`) and the panel.
+The first install also downloads the KDE runtime, about 1 GB.
+
+On Arch you can build a native package instead:
+
+```sh
+git clone https://github.com/fatihaydost/houra-linux
+cd houra-linux/packaging/aur
+makepkg -si
+```
+
+Houra lives in the tray. If your desktop has no tray (GNOME without the AppIndicator extension), the panel opens when you launch it; launch it again to bring the panel back. In the Flatpak, the first start asks your desktop to register global shortcuts for a new session (`Ctrl+Alt+N`) and the panel.
 
 The Flatpak has access to your home folder so it can read a weekly note wherever you keep it, and shares its data with a source install at the paths under [Your data](#your-data). Run only one of them at a time.
 
@@ -48,9 +63,11 @@ The Flatpak has access to your home folder so it can read a weekly note wherever
 
 | Desktop | On-screen view and break | Status |
 |---|---|---|
-| KDE Plasma (Wayland) | Layer shell | Tested |
-| Hyprland, Sway, niri, COSMIC | Layer shell | Should work, not tested yet |
-| GNOME, X11 sessions | Plain always-on-top window | Should work, not tested yet |
+| KDE Plasma (Wayland) | Layer shell | Tested on a real desktop |
+| Sway, niri, labwc | Layer shell | Tested headless |
+| X11 sessions | Plain always-on-top window | Tested headless |
+| GNOME | Plain window | Starts under mutter; where the counter and break land on a real GNOME Shell is not verified |
+| Hyprland, COSMIC | Layer shell | Not tested yet |
 
 The tray needs a StatusNotifierItem host: KDE has one, Waybar works, GNOME needs the AppIndicator extension. *Do Not Disturb during focus* needs a notification server with inhibition (KDE); the setting hides itself elsewhere.
 
@@ -150,11 +167,19 @@ flatpak-builder --user --install --force-clean --install-deps-from=flathub \
   --state-dir ~/.cache/houra-fpbuild/state ~/.cache/houra-fpbuild/build io.github.fatihaydost.Houra.yml
 ```
 
-Keep the build directory off a tmpfs: `flatpak-builder` fails there with "Can't migrate locale dirs". An AUR recipe is in [`packaging/aur`](packaging/aur).
+Keep the build directory off a tmpfs: `flatpak-builder` fails there with "Can't migrate locale dirs". To run without packaging you need Python 3.11+, the **system** PySide6 and Qt 6, and `layer-shell-qt` 6. The PySide6 wheel from pip bundles its own Qt and cannot load the system layer-shell module.
 
-To run without packaging you need Python 3.11+, the **system** PySide6 and Qt 6 (Arch: `pyside6`; Debian/Ubuntu: `python3-pyside6.*`; Fedora: `python3-pyside6`) and `layer-shell-qt` 6. The PySide6 wheel from pip bundles its own Qt and cannot load the system layer-shell module.
+| Distribution | Packages |
+|---|---|
+| Arch | `sudo pacman -S pyside6 layer-shell-qt` |
+| Fedora | `sudo dnf install python3-pyside6 layer-shell-qt` |
+| Debian 13, Ubuntu 26.04 | `sudo apt install python3-pyside6.qtcore python3-pyside6.qtdbus python3-pyside6.qtgui python3-pyside6.qtmultimedia python3-pyside6.qtnetwork python3-pyside6.qtqml python3-pyside6.qtquick python3-pyside6.qtwidgets layer-shell-qt qml6-module-org-kde-layershell qml6-module-qtquick qml6-module-qtqml qml6-module-qtquick-shapes qml6-module-qtquick-dialogs` |
+| openSUSE Tumbleweed | `sudo zypper install python313 python313-pyside6 layer-shell-qt6 layer-shell-qt6-imports` (the Python version in the name changes over time) |
+| Ubuntu 24.04 and older | No PySide6 packages: use the Flatpak |
 
 ```sh
+git clone https://github.com/fatihaydost/houra-linux
+cd houra-linux
 python3 -m houra
 python3 -m houra --login on   # start at login; `off` removes it
 ```

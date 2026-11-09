@@ -307,6 +307,10 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print("on" if autostart.is_enabled() else "off")
         return 0
+    # Login sessions start this way: a tray host may not be up yet, so "no tray" means nothing there.
+    background = bool(args) and args[0] == "--background"
+    if background:
+        args = args[1:]
     cmd = args[0] if args else ""
     arg = args[1] if len(args) > 1 else ""
     if cmd and cmd not in COMMANDS:
@@ -418,6 +422,8 @@ def main(argv: list[str] | None = None) -> int:
     tray.activated.connect(lambda reason: run("panel") if reason == QSystemTrayIcon.Trigger else None)
     host.tray = tray
     tray.show()
+    if not cmd and not background and not QSystemTrayIcon.isSystemTrayAvailable():
+        QTimer.singleShot(0, lambda: run("open"))  # without a tray nothing else would show the app started
 
     app.aboutToQuit.connect(lambda: _flush_on_quit(host, root))
     signal.signal(signal.SIGTERM, lambda *_: app.quit())

@@ -1045,12 +1045,12 @@ class HouraTests(unittest.TestCase):
                  mock.patch.object(autostart.sys, "executable", "/opt/my py/python3"):
                 self.assertTrue(autostart.set_enabled(True))
             body = path.read_text(encoding="utf-8")
-            self.assertIn('\nExec="/opt/my py/python3" -m houra\n', body)
+            self.assertIn('\nExec="/opt/my py/python3" -m houra --background\n', body)
             self.assertIn(f"\nPath={autostart.REPO_DIR}\n", body)
             self.assertIn("X-GNOME-Autostart-enabled=true", body)
             with mock.patch("shutil.which", return_value="/usr/bin/houra"):
                 autostart.set_enabled(True)
-            self.assertIn("\nExec=/usr/bin/houra\n", path.read_text(encoding="utf-8"))
+            self.assertIn("\nExec=/usr/bin/houra --background\n", path.read_text(encoding="utf-8"))
             self.assertFalse(autostart.set_enabled(False))
             self.assertFalse(path.exists())
             env = dict(os.environ, XDG_CONFIG_HOME=td)

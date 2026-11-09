@@ -30,11 +30,11 @@ def _exec_arg(arg: str) -> str:
 def exec_line() -> tuple[str, str | None]:
     """(Exec value, working dir or None) matching how the user runs Houra now."""
     if FLATPAK:
-        return f"flatpak run {os.environ['FLATPAK_ID']}", None
+        return f"flatpak run {os.environ['FLATPAK_ID']} --background", None
     found = shutil.which("houra")
     if found:  # absolute: the login session's PATH may lack ~/.local/bin
-        return _exec_arg(found), None
-    return " ".join(_exec_arg(a) for a in (sys.executable, "-m", "houra")), str(REPO_DIR)
+        return f"{_exec_arg(found)} --background", None
+    return " ".join(_exec_arg(a) for a in (sys.executable, "-m", "houra", "--background")), str(REPO_DIR)
 
 
 def is_enabled() -> bool:
