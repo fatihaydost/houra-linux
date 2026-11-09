@@ -273,8 +273,16 @@ Item {
           color: (addCatHov.containsMouse || kbFocused)
             ? Theme.withAlpha(root.tokens.primaryBg || "#ffffff", 0.86)
             : (root.tokens.primaryBg || "#ffffff")
-          border.width: kbFocused ? 2 : 0
-          border.color: root.tokens.accent || "#3d8cff"
+          // Outside the button: on the filled button an inner accent border is invisible.
+          Rectangle {
+            visible: parent.kbFocused
+            anchors.fill: parent
+            anchors.margins: -3
+            radius: parent.radius + 3
+            color: "transparent"
+            border.width: 2
+            border.color: root.tokens.accent || "#3d8cff"
+          }
 
           Text {
             textFormat: Text.PlainText

@@ -293,6 +293,24 @@ class HouraTests(unittest.TestCase):
         kept = self.rpc("add-todo", {"title": "p1 Report @14:30", "literal": True})
         self.assertIn("p1 Report @14:30", [t["title"] for t in kept["today"]["todos"]])
 
+    def test_start_session_literal_extra_keeps_copied_title(self) -> None:
+        # A weekly-note task picked in New Session must keep its title, or it reads as not copied.
+        self.rpc("snapshot")
+        res = self.rpc("start-session", {"categoryId": 1, "goal": "x", "workMin": 25, "restMin": 5,
+                                         "extraTasks": [{"title": "p1 Report @14:30", "literal": True},
+                                                        {"title": "Typed p2", "detail": ""}]})
+        titles = [t["title"] for t in res["today"]["todos"]]
+        self.assertIn("p1 Report @14:30", titles)
+        self.assertIn("Typed", titles)
+
+    def test_menu_text_escapes_mnemonic_and_chime_tolerates_missing_multimedia(self) -> None:
+        import sys
+        from unittest import mock
+        from houra import app
+        self.assertEqual(app._menu_text({"label": "Close & save"}), "Close && save")
+        with mock.patch.dict(sys.modules, {"PySide6.QtMultimedia": None}):
+            app.Host.playSound(mock.Mock(_sound=None), "/x.wav")  # must not raise
+
     def test_update_session_retags_past_session(self) -> None:
         import sqlite3
         self.rpc("snapshot")

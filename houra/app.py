@@ -166,7 +166,10 @@ class Host(QObject):
     def playSound(self, path: str) -> None:
         if not path:
             return
-        from PySide6.QtMultimedia import QSoundEffect
+        try:
+            from PySide6.QtMultimedia import QSoundEffect
+        except ImportError:  # optional on some distros; raising here would abort the QML caller
+            return
         if self._sound is None:
             self._sound = QSoundEffect(self)
             self._sound.setVolume(0.6)
@@ -197,6 +200,10 @@ def _flush_on_quit(host: Host, root: QObject) -> None:
                 print(f"houra: quit flush {cmd} failed: {res.get('error')}", file=sys.stderr)
         except Exception as exc:
             print(f"houra: quit flush {cmd} failed: {exc}", file=sys.stderr)
+
+
+def _menu_text(entry: dict) -> str:
+    return str(entry.get("label", "")).replace("&", "&&")  # a lone & is Qt's mnemonic marker
 
 
 def _server_name() -> str:
@@ -327,7 +334,8 @@ def main(argv: list[str] | None = None) -> int:
     app.setQuitOnLastWindowClosed(False)
     app.setWindowIcon(QIcon(str(ICON_PATH)))
 
-    reply = _send_to_running(cmd or "open", arg)
+    # A login start only needs to know an instance is there; "open" would pop its panel up.
+    reply = _send_to_running("status" if background and not cmd else cmd or "open", arg)
     if reply is not None:
         if reply and (cmd == "status" or reply.startswith("unknown")):
             print(reply)
@@ -398,9 +406,9 @@ def main(argv: list[str] | None = None) -> int:
             if e.get("separator"):
                 target.addSeparator()
             elif e.get("children"):
-                fill(target.addMenu(str(e.get("label", ""))), e["children"])
+                fill(target.addMenu(_menu_text(e)), e["children"])
             else:
-                act = target.addAction(str(e.get("label", "")))
+                act = target.addAction(_menu_text(e))
                 act.setEnabled(bool(e.get("enabled", True)))
                 if e.get("checked") is not None:
                     act.setCheckable(True)

@@ -506,6 +506,7 @@ Scope {
           title: tdItem.title,
           detail: tdItem.detail || tdItem.dueLabel || tdItem.projectName || "",
           todoistId: tdItem.id,
+          literal: true,
           priority: Number(tdItem.priority) || 1,
           dueTime: tdItem.dueTime || "",
           categoryId: Number(tdItem.categoryId) || selectedCategoryId
@@ -516,7 +517,7 @@ Scope {
       var wt = weeklyTasksRaw[i]
       if (pickedWeeklyKeys.indexOf(wt.key) !== -1) {
         var det = wt.subgroup ? wt.subgroup : (wt.group || "")
-        combinedExtra.push({ title: wt.title, detail: det })
+        combinedExtra.push({ title: wt.title, detail: det, literal: true })
       }
     }
     for (var j = 0; j < extraTasks.length; j++) {

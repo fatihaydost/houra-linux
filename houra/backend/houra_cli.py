@@ -2612,7 +2612,10 @@ def handle_command(cmd: str, payload: dict[str, Any]) -> dict[str, Any]:
                 raw_title = str(extra.get("title") or "").strip()
                 if not raw_title:
                     continue
-                clean_title, sh_prio, sh_time = _extract_task_shorthands(raw_title)
+                # Copied text (weekly note, Todoist) keeps its title; only typed tasks use shorthands
+                clean_title, sh_prio, sh_time = (
+                    (raw_title, None, "") if extra.get("literal") else _extract_task_shorthands(raw_title)
+                )
                 detail = str(extra.get("detail") or "").strip()
                 td_id = str(extra.get("todoistId") or "").strip()
                 reuse_id = existing_td_map.get(td_id, 0) if td_id else 0
