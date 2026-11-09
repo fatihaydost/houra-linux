@@ -1,7 +1,7 @@
 # Maintainer: Fatih Aydost <fatihaydost at users dot noreply dot github dot com>
 pkgname=houra-git
 _pkgname=houra-linux
-pkgver=2.0.1.r0.g0000000
+pkgver=2.0.2.r0.g0000000
 pkgrel=1
 pkgdesc='Calm focus timer with on-screen counter, breaks and local statistics (PySide6 + QML)'
 arch=('any')

@@ -1,6 +1,6 @@
 pkgbase = houra-git
 	pkgdesc = Calm focus timer with on-screen counter, breaks and local statistics (PySide6 + QML)
-	pkgver = 2.0.1.r0.g0000000
+	pkgver = 2.0.2.r0.g0000000
 	pkgrel = 1
 	url = https://github.com/fatihaydost/houra-linux
 	arch = any
