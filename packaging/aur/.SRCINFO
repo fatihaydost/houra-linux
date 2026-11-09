@@ -1,0 +1,18 @@
+pkgbase = houra-git
+	pkgdesc = Calm focus timer with on-screen counter, breaks and local statistics (PySide6 + QML)
+	pkgver = 1.0.0.r0.g0000000
+	pkgrel = 1
+	url = https://github.com/fatihaydost/houra-linux
+	arch = any
+	license = MIT
+	makedepends = git
+	depends = python
+	depends = pyside6
+	depends = layer-shell-qt
+	optdepends = qt6-multimedia: break chime
+	provides = houra
+	conflicts = houra
+	source = houra-linux::git+https://github.com/fatihaydost/houra-linux.git
+	sha256sums = SKIP
+
+pkgname = houra-git

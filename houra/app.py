@@ -17,7 +17,7 @@ from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from . import autostart
+from . import autostart, shortcuts
 from .backend import houra_cli
 
 APP_ID = "io.github.fatihaydost.Houra"
@@ -177,6 +177,11 @@ class Host(QObject):
     def setTrayStatus(self, tooltip: str) -> None:
         if self.tray:
             self.tray.setToolTip(tooltip)
+
+    @Slot(str, str)
+    def showError(self, title: str, body: str) -> None:
+        if self.tray:
+            self.tray.showMessage(title, body, QSystemTrayIcon.Warning, 8000)
 
 
 def _flush_on_quit(host: Host, root: QObject) -> None:
@@ -371,6 +376,7 @@ def main(argv: list[str] | None = None) -> int:
     state["root"] = engine.rootObjects()[0]
     for c, a in state["queued"]:
         QTimer.singleShot(0, lambda c=c, a=a: run(c, a))
+    shortcuts.start(run, app)
 
     tray = QSystemTrayIcon(QIcon(str(ICON_PATH)), app)
     tray.setToolTip("Houra")

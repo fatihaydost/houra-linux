@@ -1060,6 +1060,12 @@ class HouraTests(unittest.TestCase):
                 self.assertEqual((res.returncode, res.stdout.strip()), (0, want), res.stderr)
                 self.assertEqual(path.exists(), want == "on")
 
+    def test_global_shortcuts_only_missing_ids_trigger_a_bind(self) -> None:
+        from houra import shortcuts
+        self.assertEqual(shortcuts.missing([]), ["new-session", "panel"])
+        self.assertEqual(shortcuts.missing([("panel", {}), ("other", {})]), ["new-session"])
+        self.assertEqual(shortcuts.missing([("panel", {}), ("new-session", {})]), [])
+
     def test_qml_smoke_loads_headless(self) -> None:
         env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
         with tempfile.TemporaryDirectory() as td:

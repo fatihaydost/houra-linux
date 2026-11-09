@@ -63,7 +63,7 @@ flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakr
 flatpak install --user dist/houra.flatpak
 ```
 
-Commands become `flatpak run io.github.fatihaydost.Houra newSession` and so on. The
+Commands become `flatpak run io.github.fatihaydost.Houra newSession` and so on. On first start the Flatpak asks the desktop's portal to register global shortcuts for a new session and the panel. The
 Flatpak reads and writes the same files as the native install (see Data), so both
 share one history; run only one of them at a time. Keep the build directory off a
 tmpfs: `flatpak-builder` fails with "Can't migrate locale dirs" there.

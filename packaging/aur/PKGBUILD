@@ -1,0 +1,48 @@
+# Maintainer: Fatih Aydost <fatihaydost at users dot noreply dot github dot com>
+pkgname=houra-git
+_pkgname=houra-linux
+pkgver=1.0.0.r0.g0000000
+pkgrel=1
+pkgdesc='Calm focus timer with on-screen counter, breaks and local statistics (PySide6 + QML)'
+arch=('any')
+url='https://github.com/fatihaydost/houra-linux'
+license=('MIT')
+depends=('python' 'pyside6' 'layer-shell-qt')
+makedepends=('git')
+optdepends=('qt6-multimedia: break chime')
+provides=('houra')
+conflicts=('houra')
+source=("$_pkgname::git+https://github.com/fatihaydost/houra-linux.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$_pkgname"
+  # no tags yet: fall back to pyproject version + commit count + short hash
+  if git describe --tags --long >/dev/null 2>&1; then
+    git describe --tags --long | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+  else
+    printf '%s.r%s.g%s' \
+      "$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)" \
+      "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+  fi
+}
+
+package() {
+  cd "$_pkgname"
+  # Pure-Python app that reads qml/ and assets/ relative to the module: ship the tree as is.
+  install -d "$pkgdir/usr/share/houra"
+  cp -r houra "$pkgdir/usr/share/houra/"
+  find "$pkgdir/usr/share/houra" -name __pycache__ -prune -exec rm -rf {} +
+
+  install -Dm755 /dev/stdin "$pkgdir/usr/bin/houra" <<'LAUNCHER'
+#!/bin/sh
+export PYTHONPATH="/usr/share/houra${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m houra "$@"
+LAUNCHER
+
+  install -Dm644 data/io.github.fatihaydost.Houra.desktop -t "$pkgdir/usr/share/applications"
+  install -Dm644 packaging/flatpak/icon-256.png \
+    "$pkgdir/usr/share/icons/hicolor/256x256/apps/io.github.fatihaydost.Houra.png"
+  install -Dm644 packaging/flatpak/io.github.fatihaydost.Houra.metainfo.xml -t "$pkgdir/usr/share/metainfo"
+  install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+}

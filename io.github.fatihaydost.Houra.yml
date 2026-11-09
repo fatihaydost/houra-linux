@@ -16,8 +16,17 @@ finish-args:
   - --filesystem=xdg-config/autostart:create
   - --talk-name=org.freedesktop.Notifications   # do-not-disturb inhibit
   - --talk-name=org.kde.StatusNotifierWatcher   # tray icon
+build-options:
+  env:
+    BASEAPP_REMOVE_WEBENGINE: '1'
+    BASEAPP_DISABLE_NUMPY: '1'
 cleanup-commands:
   - /app/cleanup-BaseApp.sh
+  # Build-time tooling and bindings Houra never imports; the import list is in houra/app.py.
+  - rm -rf /app/lib/libLLVM* /app/lib/libclang* /app/translations /app/qtwebengine_dictionaries /app/resources
+  - cd /app/lib/python3*/site-packages && rm -rf OpenGL pyopengl-* shiboken6_generator shiboken6_generator-* patchelf-* distro distro-* pyproject_hooks*
+  - cd /app/lib/python3*/site-packages/PySide6 && rm -rf assistant balsam balsamui designer linguist lrelease lupdate qmlformat qmllint qmlls qsb typesystems include glue *.pyi
+  - cd /app/lib/python3*/site-packages/PySide6 && rm -f Qt3D*.so QtBluetooth*.so QtCharts*.so QtConcurrent*.so QtDataVisualization*.so QtDesigner*.so QtGraphs*.so QtHelp*.so QtHttpServer*.so QtLocation*.so QtNetworkAuth*.so QtNfc*.so QtPdf*.so QtPositioning*.so QtPrintSupport*.so QtQuick3D*.so QtQuickControls2*.so QtQuickTest*.so QtQuickWidgets*.so QtRemoteObjects*.so QtScxml*.so QtSensors*.so QtSerial*.so QtSpatialAudio*.so QtSql*.so QtStateMachine*.so QtSvg*.so QtTest*.so QtTextToSpeech*.so QtUiTools*.so QtWebChannel*.so QtWebSockets*.so QtXml*.so QtAxContainer*.so
 modules:
   - name: layer-shell-qt
     buildsystem: cmake-ninja
@@ -28,6 +37,14 @@ modules:
       - type: git
         url: https://invent.kde.org/plasma/layer-shell-qt.git
         tag: v6.8.2
+  - name: jeepney   # D-Bus for the global shortcuts portal; QtDBus cannot send its a(sa{sv})
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-index --no-deps --prefix=/app jeepney-0.9.0-py3-none-any.whl
+    sources:
+      - type: file
+        url: https://files.pythonhosted.org/packages/b2/a3/e137168c9c44d18eff0376253da9f1e9234d0239e0ee230d2fee6cea8e55/jeepney-0.9.0-py3-none-any.whl
+        sha256: 97e5714520c16fc0a45695e5365a2e11b81ea79bba796e26f9f1d178cb182683
   - name: houra
     buildsystem: simple
     build-commands:

@@ -235,6 +235,11 @@ Item {
       console.warn("houra: backend", cmd, "failed:", err)
       lastError = cmd + ": " + err
       backendError(cmd, err)
+      // Background refreshes retry by themselves; a Todoist outage must not nag every 90 s.
+      if (!/snapshot|todoist/i.test(cmd) && Date.now() - _lastErrorShownMs > 60000) {
+        _lastErrorShownMs = Date.now()
+        Host.showError(Theme.t(lang, "Houra işlemi tamamlayamadı", "Houra could not finish that"), cmd + ": " + err)
+      }
       lastErrorTimer.restart()
     }
     // Callbacks also run on failure; every one tolerates a result without its data fields
@@ -246,6 +251,7 @@ Item {
 
   // Last backend failure, for any window to show; the tray tooltip shows it until the next tick/8 s
   property string lastError: ""
+  property real _lastErrorShownMs: 0
   signal backendError(string cmd, string message)
   Timer {
     id: lastErrorTimer
